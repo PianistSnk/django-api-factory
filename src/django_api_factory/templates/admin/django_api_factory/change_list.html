@@ -1,0 +1,285 @@
+{% extends "admin/change_list.html" %}
+{% load admin_list %}
+{% comment %}
+  Default change_list.html for django-api-factory.
+  Extends Django's stock template and:
+    1. appends the ActionFormMixin modal at the end of the content block
+    2. injects a per-page selector in the pagination block (override of stock)
+  Subclasses can override `change_list_template` to a different file if they
+  don't want either piece.
+{% endcomment %}
+
+{% block pagination %}
+  {{ block.super }}
+  {% comment %}Per-page selector. NOT a `<form>` because we're inside the
+     changelist-form (a POST form) and nested forms are invalid HTML —
+     the browser would submit the OUTER form when the user clicks any
+     button inside the inner form, losing `per_page` from the URL.
+     Instead, we use pure JS to navigate: onchange + a visible "应用"
+     button both call `applyPerPage()`.{% endcomment %}
+  <p class="paginator per-page-selector">
+    <label for="per-page-select" style="font-weight:normal; margin-right:6px;">每页显示</label>
+    <select id="per-page-select" name="per_page"
+            onchange="applyPerPage();"
+            style="display:inline-block; width:auto; margin:0 6px; padding:2px 6px; height:auto;">
+      {% for n in cl.model_admin.PER_PAGE_CHOICES %}
+        <option value="{{ n }}"{% if cl.effective_per_page == n %} selected{% endif %}>{{ n }}</option>
+      {% endfor %}
+    </select>
+    <span style="color:#666;">条</span>
+  </p>
+  <script>
+    // Pure-JS navigation. We can't use a <form> here because we're
+    // nested inside the changelist-form (a POST form) and the browser
+    // would submit the outer form on any button click.
+    function applyPerPage() {
+      var select = document.getElementById('per-page-select');
+      if (!select || !select.value) return;
+      var u = new URL(window.location.href);
+      u.searchParams.set('per_page', select.value);
+      // Cut to page 1 when per_page changes (matches the documented
+      // behavior: "切 per_page 时回第 1 页").
+      u.searchParams.delete('p');
+      window.location.href = u.toString();
+    }
+  </script>
+{% endblock %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    .per-page-selector { padding: 4px 12px; }
+    .per-page-selector select { cursor: pointer; }
+    .per-page-selector button { cursor: pointer; }
+
+    /* Top horizontal filter bar (modeled after simpleui). The filters
+       are rendered inline (each <details> is a pill that drops
+       down options when expanded). */
+    .filter-bar-top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0 6px;
+      padding: 8px 12px;
+      background: #f9f9f9;
+      border-bottom: 1px solid #ddd;
+      margin-bottom: 12px;
+    }
+    /* Hide the right-side filter nav (we moved filters to the top). */
+    #changelist-filter { display: none !important; }
+  </style>
+{% endblock %}
+
+{% block search %}
+  {{ block.super }}
+  {% if cl.has_filters %}
+    <div class="filter-bar-top">
+      {% for spec in cl.filter_specs %}{% admin_list_filter cl spec %}{% endfor %}
+    </div>
+  {% endif %}
+{% endblock %}
+
+{% block filters %}
+  {% comment %}
+  Hide the right-side filter nav — filters moved to the top.
+  {% endcomment %}
+{% endblock %}
+
+{% block content %}
+  {{ block.super }}
+  {% include "admin/django_api_factory/action_form_modal.html" %}
+{% endblock %}
+
+{% block extrabody %}
+  {{ block.super }}
+  <script>
+  // Multi-select commit (modeled after simpleui's batch-apply
+  // filter bar: pick many → click 确定 → navigate with the
+  // comma-list URL `?field=v1,v2,v3`). The in-memory filter in
+  // APIAdmin.get_api_data already handles that URL via
+  // `search_pars[field_name].split(',')` (OR semantics) — no
+  // extra queryset plumbing needed here.
+  (function () {
+    function buildUrl(field, values) {
+      var u = new URL(window.location.href);
+      u.searchParams.delete(field);
+      if (values.length) {
+        u.searchParams.set(field, values.join(','));
+      }
+      u.searchParams.delete('p');
+      return u.toString();
+    }
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest('.filter-inline-apply, .filter-inline-clear');
+      if (!btn) return;
+      e.preventDefault();
+      var pill = btn.closest('.filter-inline-multi');
+      if (!pill) return;
+      var field = pill.getAttribute('data-filter-field');
+      var checks = pill.querySelectorAll('.filter-inline-check');
+      if (btn.classList.contains('filter-inline-clear')) {
+        Array.prototype.forEach.call(checks, function (c) { c.checked = false; });
+        window.location.href = buildUrl(field, []);
+        return;
+      }
+      var vals = [];
+      Array.prototype.forEach.call(checks, function (c) {
+        if (c.checked) vals.push(c.getAttribute('data-value'));
+      });
+      window.location.href = buildUrl(field, vals);
+    });
+    document.addEventListener('input', function (e) {
+      var input = e.target;
+      if (!input.classList || !input.classList.contains('filter-inline-search')) return;
+      // Debounced server-side search (Jun 2026): when the user types,
+      // wait 250ms then AJAX `/admin/.../?ajax_distinct=1&field=X&q=...`
+      // to get values that match the search term across the WHOLE
+      // dataset, not just the initial 200 rendered. Replaces the
+      // dropdown contents (the legacy client-side hide/show is
+      // preserved as instant feedback for the 200 already loaded).
+      clearTimeout(window.__filterSearchDebounce);
+      var q = input.value.trim();
+      var ul = input.parentElement.querySelector('.filter-inline-list');
+      if (!ul) return;
+      // Instant client-side filter on the 200 already loaded
+      var ql = q.toLowerCase();
+      Array.prototype.forEach.call(ul.children, function (li) {
+        li.style.display = (!ql || li.textContent.toLowerCase().indexOf(ql) !== -1) ? '' : 'none';
+      });
+      // Reset offset and debounce-fetch
+      ul.setAttribute('data-offset', '0');
+      window.__filterSearchDebounce = setTimeout(function () {
+        fetchDistinct(input, q, 0, /*replace*/ true);
+      }, 250);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && e.target.classList && e.target.classList.contains('filter-inline-search')) {
+        e.target.value = '';
+        e.target.dispatchEvent(new Event('input'));
+      }
+    });
+    // Load-more button: click to fetch the next page of distinct
+    // values (or the next page of search results if the search box
+    // is non-empty). Appends <li> items to the existing <ul>.
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest('.filter-inline-load-more');
+      if (!btn) return;
+      if (btn.getAttribute('data-loading') === 'true') return;
+      var popup = btn.closest('.filter-popup');
+      var input = popup.querySelector('.filter-inline-search');
+      var q = input ? input.value.trim() : '';
+      var ul = popup.querySelector('.filter-inline-list');
+      var offset = parseInt(ul.getAttribute('data-offset') || '0', 10);
+      fetchDistinct(input, q, offset, /*replace*/ false, btn);
+    });
+
+    function fetchDistinct(input, q, offset, replace, btn) {
+      if (!input) return;
+      var popup = input.closest('.filter-popup');
+      var details = popup.closest('details');
+      var fieldName = details ? details.getAttribute('data-filter-field') : null;
+      if (!fieldName) return;
+      var ul = popup.querySelector('.filter-inline-list');
+      var loadMoreBtn = popup.querySelector('.filter-inline-load-more');
+      var statusSpan = popup.querySelector('.filter-inline-status');
+      if (btn) btn.setAttribute('data-loading', 'true');
+      if (loadMoreBtn) { loadMoreBtn.setAttribute('data-loading', 'true'); loadMoreBtn.textContent = '加载中…'; }
+      if (statusSpan) { statusSpan.style.display = ''; statusSpan.textContent = '搜索中…'; }
+      var url = new URL(window.location.href);
+      url.searchParams.set('ajax_distinct', '1');
+      url.searchParams.set('field', fieldName);
+      url.searchParams.set('limit', '200');
+      url.searchParams.set('offset', String(offset));
+      if (q) url.searchParams.set('q', q); else url.searchParams.delete('q');
+      fetch(url.toString(), { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (replace) {
+            // Clear existing <li>
+            while (ul.firstChild) ul.removeChild(ul.firstChild);
+            ul.setAttribute('data-total', String(data.count || 0));
+          }
+          // Append the new <li> items
+          var frag = document.createDocumentFragment();
+          (data.values || []).forEach(function (v) {
+            var li = document.createElement('li');
+            // Mirror the choice rendering in the template: single-select
+            // = <a>, multi-select = <label><input type=checkbox></label>.
+            // We read the spec from a data-attr on the <details>.
+            var isMulti = details.getAttribute('data-multi') === 'true';
+            if (isMulti) {
+              var label = document.createElement('label');
+              var cb = document.createElement('input');
+              cb.type = 'checkbox';
+              cb.className = 'filter-inline-check';
+              cb.setAttribute('data-value', String(v));
+              var span = document.createElement('span');
+              span.textContent = String(v);
+              label.appendChild(cb);
+              label.appendChild(span);
+              li.appendChild(label);
+            } else {
+              var a = document.createElement('a');
+              // href mirrors the existing single-select pattern: the
+              // current URL with this field set to v.
+              var href = new URL(window.location.href);
+              href.searchParams.set(fieldName, String(v));
+              href.searchParams.delete('p');
+              a.href = href.toString();
+              a.textContent = String(v);
+              li.appendChild(a);
+            }
+            frag.appendChild(li);
+          });
+          ul.appendChild(frag);
+          // Update offset and load-more visibility
+          var newOffset = offset + (data.values || []).length;
+          ul.setAttribute('data-offset', String(newOffset));
+          if (loadMoreBtn) {
+            if (data.truncated) {
+              loadMoreBtn.style.display = '';
+              loadMoreBtn.textContent = '加载更多…';
+              loadMoreBtn.setAttribute('data-loading', 'false');
+            } else {
+              loadMoreBtn.style.display = 'none';
+            }
+          }
+          if (statusSpan) {
+            if (q) {
+              statusSpan.textContent = '匹配 ' + (data.count || 0) + ' 个 (已显 ' + newOffset + ')';
+            } else {
+              statusSpan.textContent = '共 ' + (data.count || 0) + ' 个';
+            }
+          }
+        })
+        .catch(function (err) {
+          if (statusSpan) statusSpan.textContent = '加载失败: ' + err;
+          if (loadMoreBtn) { loadMoreBtn.textContent = '加载失败, 重试'; loadMoreBtn.setAttribute('data-loading', 'false'); }
+        });
+    }
+
+    // Show the load-more button on render if the initial render was
+    // truncated. We know this from the data-total attribute (which the
+    // template sets to the spec's total_count) compared to the
+    // rendered child count.
+    document.addEventListener('DOMContentLoaded', function () {
+      document.querySelectorAll('.filter-inline-list').forEach(function (ul) {
+        var total = parseInt(ul.getAttribute('data-total') || '0', 10);
+        var shown = ul.children.length;
+        // The "All" <li> is the first child (single-select only),
+        // subtract it from shown when comparing.
+        var firstLi = ul.children[0];
+        if (firstLi && firstLi.textContent && firstLi.textContent.trim() === 'All') shown -= 1;
+        var btn = ul.parentElement.querySelector('.filter-inline-load-more');
+        var status = ul.parentElement.querySelector('.filter-inline-status');
+        if (total > shown) {
+          if (btn) btn.style.display = '';
+          if (status) { status.style.display = ''; status.textContent = '共 ' + total + ' 个'; }
+        } else if (total > 0) {
+          if (status) { status.style.display = ''; status.textContent = '共 ' + total + ' 个'; }
+        }
+      });
+    });
+  })();
+  </script>
+{% endblock %}

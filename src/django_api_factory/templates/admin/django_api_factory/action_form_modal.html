@@ -1,0 +1,175 @@
+{% comment %}
+  Modal + JS for ActionFormMixin. Renders into a hidden <div> at the bottom of
+  the changelist page. Auto-discovers any admin action whose function has a
+  `.layer` attribute, and intercepts the standard admin "Go" button to show
+  this modal first.
+
+  No JS framework dependency. No simpleui / theme dependency.
+{% endcomment %}
+<div id="daf-action-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9999;">
+  <div style="background:#fff; max-width:560px; margin:48px auto; padding:24px; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.2);">
+    <h3 id="daf-action-title" style="margin-top:0;"></h3>
+    <form id="daf-action-form"></form>
+    <div style="margin-top:16px; text-align:right;">
+      <button type="button" id="daf-action-cancel" style="margin-right:8px;">取消</button>
+      <button type="button" id="daf-action-submit">提交</button>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  function getCookie(name) {
+    var m = document.cookie.match('(^|;)\\s*' + name + '=([^;]+)');
+    return m ? decodeURIComponent(m[2]) : '';
+  }
+
+  function renderField(f) {
+    var wrap = document.createElement('div');
+    wrap.style.marginBottom = '12px';
+    var label = document.createElement('label');
+    label.style.display = 'block';
+    label.style.fontWeight = '600';
+    label.style.marginBottom = '4px';
+    label.textContent = f.label || f.key;
+    if (f.require) {
+      var star = document.createElement('span');
+      star.textContent = ' *';
+      star.style.color = 'red';
+      label.appendChild(star);
+    }
+    wrap.appendChild(label);
+
+    var input;
+    if (f.type === 'textarea') {
+      input = document.createElement('textarea');
+    } else if (f.type === 'select') {
+      input = document.createElement('select');
+      (f.options || []).forEach(function (opt) {
+        var o = document.createElement('option');
+        o.value = opt.key || opt.value || opt;
+        o.textContent = opt.label || opt.key || opt.value || opt;
+        if (f.value !== undefined && String(f.value) === String(o.value)) o.selected = true;
+        input.appendChild(o);
+      });
+    } else if (f.type === 'radio') {
+      (f.options || []).forEach(function (opt) {
+        var r = document.createElement('input');
+        r.type = 'radio';
+        r.name = f.key;
+        r.value = opt.key || opt.value || opt;
+        r.required = !!f.require;
+        var t = document.createElement('span');
+        t.style.marginRight = '12px';
+        t.textContent = ' ' + (opt.label || opt.key || opt);
+        wrap.appendChild(r);
+        wrap.appendChild(t);
+      });
+      return wrap;
+    } else if (f.type === 'file') {
+      input = document.createElement('input');
+      input.type = 'file';
+    } else {
+      // default: input
+      input = document.createElement('input');
+      input.type = f.type || 'text';
+    }
+    input.name = f.key;
+    if (f.value !== undefined && f.value !== null) input.value = f.value;
+    input.required = !!f.require;
+    if (input.style) input.style.width = '100%';
+    wrap.appendChild(input);
+    return wrap;
+  }
+
+  function openModal(actionName, title, fields, selectedIds) {
+    var modal = document.getElementById('daf-action-modal');
+    document.getElementById('daf-action-title').textContent = title || actionName;
+    var form = document.getElementById('daf-action-form');
+    form.innerHTML = '';
+    fields.forEach(function (f) { form.appendChild(renderField(f)); });
+    var sel = document.createElement('input');
+    sel.type = 'hidden';
+    sel.name = '_selected';
+    sel.value = (selectedIds || []).join(',');
+    form.appendChild(sel);
+    modal.style.display = 'block';
+
+    var submitBtn = document.getElementById('daf-action-submit');
+    submitBtn.onclick = function () {
+      var fd = new FormData(form);
+      var url = window.location.pathname.replace(/\/?$/, '/') + 'action-submit/' + encodeURIComponent(actionName) + '/';
+      fetch(url, {
+        method: 'POST',
+        body: fd,
+        headers: { 'X-CSRFToken': getCookie('csrftoken') },
+        credentials: 'same-origin',
+      })
+        .then(function (r) {
+          var ct = r.headers.get('content-type') || '';
+          if (ct.indexOf('application/json') !== -1) return r.json();
+          return r.blob().then(function (b) { return { status: 'download', blob: b }; });
+        })
+        .then(function (data) {
+          if (data.status === 'download') {
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(data.blob);
+            a.download = '';
+            a.click();
+          } else {
+            alert((data.msg || (data.status === 'success' ? 'Success!' : 'Error')));
+          }
+          modal.style.display = 'none';
+          if (data.status === 'success' || data.status === 'error') {
+            window.location.reload();
+          }
+        })
+        .catch(function (err) { alert('Network error: ' + err); });
+    };
+    document.getElementById('daf-action-cancel').onclick = function () {
+      modal.style.display = 'none';
+    };
+  }
+
+  // Intercept the standard admin "Go" button when an action with `.layer` is chosen.
+  // We discover the schema via the action-form endpoint.
+  document.addEventListener('DOMContentLoaded', function () {
+    // Django admin 5.2 uses `name="action"` (no `id` attribute) for
+    // the action <select>. Fall back to it if the older id isn't there.
+    var actionSelect = document.getElementById('changelist-form-action')
+      || document.querySelector('select[name="action"]');
+    var goButton = document.querySelector('#changelist-form button[name="index"]');
+    if (!actionSelect || !goButton) return;
+
+    // Hijack the form submit
+    var form = document.getElementById('changelist-form');
+    if (!form) return;
+    form.addEventListener('submit', function (ev) {
+      var actionName = actionSelect.value;
+      if (!actionName) return;  // no action selected, let default proceed
+      ev.preventDefault();
+      var selectedIds = Array.from(form.querySelectorAll('input[name="_selected_action"]:checked'))
+        .map(function (el) { return el.value; });
+      var formAction = form.querySelector('input[name="select_across"]');
+      var selectAcrossInput = document.createElement('input');
+      selectAcrossInput.type = 'hidden';
+      selectAcrossInput.name = 'select_across';
+      selectAcrossInput.value = formAction ? formAction.value : '0';
+      // (Will be re-attached in the modal form on submit.)
+
+      // Fetch the layer schema
+      var url = window.location.pathname.replace(/\/?$/, '/') + 'action-form/' + encodeURIComponent(actionName) + '/';
+      fetch(url, { headers: { 'X-CSRFToken': getCookie('csrftoken') }, credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (schema) {
+          if (!schema.params || schema.params.length === 0) {
+            // No form needed — submit directly
+            openModal(actionName, schema.title, [{ type: 'hidden', key: 'noop' }], selectedIds, schema.width);
+          } else {
+            openModal(actionName, schema.title, schema.params, selectedIds, schema.width);
+          }
+        })
+        .catch(function (err) { alert('Failed to load action form: ' + err); });
+    });
+  });
+})();
+</script>

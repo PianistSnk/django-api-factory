@@ -1,0 +1,29 @@
+{% extends "admin/change_form.html" %}
+{% comment %}
+  Simplified demo of a custom change_form template for APIModel detail views.
+  Real templates (e.g. production templates) typically use
+  Vue + Element UI to render a dashboard. This is a minimal version that
+  proves the detail-view cache (T1.5) is working.
+
+  Template note: Django template language refuses to access attributes
+  starting with `_` (e.g. `_meta`), so we hardcode the field list here
+  rather than iterating model fields. In a real project, this list would
+  come from the API response (not the model class).
+{% endcomment %}
+{% block content %}
+  <h1>Post #{{ original.id }} — Detail (from cache)</h1>
+  <table style="border-collapse: collapse; margin-top: 1em;">
+    <tr><th style="text-align:left;padding:4px 8px;border:1px solid #ccc;">userId</th>
+        <td style="padding:4px 8px;border:1px solid #ccc;">{{ original.userId }}</td></tr>
+    <tr><th style="text-align:left;padding:4px 8px;border:1px solid #ccc;">id</th>
+        <td style="padding:4px 8px;border:1px solid #ccc;">{{ original.id }}</td></tr>
+    <tr><th style="text-align:left;padding:4px 8px;border:1px solid #ccc;">title</th>
+        <td style="padding:4px 8px;border:1px solid #ccc;">{{ original.title }}</td></tr>
+    <tr><th style="text-align:left;padding:4px 8px;border:1px solid #ccc;">body</th>
+        <td style="padding:4px 8px;border:1px solid #ccc;">{{ original.body }}</td></tr>
+  </table>
+  <p style="margin-top:1em;color:#888;font-size:0.9em;">
+    This page was served from the detail-view cache (T1.5) without a
+    fresh API call. Reloading the changelist re-populates the cache.
+  </p>
+{% endblock %}
