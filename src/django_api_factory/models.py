@@ -12,6 +12,20 @@ class APIModel(models.Model):
 
     Subclasses may override:
     - black_fields: list of field names to hide from the admin
+
+    Permissions:
+        APIModel subclasses are admin-only data viewers — the data lives
+        in someone else's REST endpoint, not in our database, so users
+        cannot add / change / delete API-sourced rows. We auto-generate
+        ONLY the `view_<modelname>` permission; the add / change / delete
+        ones are removed in `apps.DjangoApiFactoryConfig.ready()` via a
+        `post_migrate` signal handler.
+
+        Why post_migrate and not Meta.default_permissions: Django 5.2
+        hardcodes `default_permissions` to `('add', 'change', 'delete',
+        'view')` in `Options.__init__` and ignores the `Meta.default_permissions`
+        field. The post_migrate approach is the documented way to trim
+        the auto-generated permission set.
     """
 
     black_fields = ["id"]  # type: list[str]
@@ -25,7 +39,6 @@ class APIModel(models.Model):
     class Meta:
         abstract = True
         managed = False
-        default_permissions = []
 
     @classmethod
     @abstractmethod

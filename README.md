@@ -264,6 +264,29 @@ open htmlcov/index.html
 
 The suite has **88 tests** covering the core (audit hooks, schema registry, action-form modal, detail/changelist cache, filter, app config). Coverage is **72%** with `--cov-fail-under=70` enforced in `pyproject.toml`. The remaining 28% is mostly inside `get_api_data` (the `requests.get` + data-munging path), which is better covered by end-to-end tests in the `example/` project than by unit tests.
 
+## Permissions
+
+`django-api-factory` is read-only: the data lives in someone else's REST
+endpoint, not in your database, so users cannot add / change / delete
+API-sourced rows. Only the `view_<modelname>` permission is auto-generated
+per model.
+
+Granting access is just standard Django auth:
+
+1. Log into `/admin/` as a superuser.
+2. Go to **Users** or **Groups** → select the user / group.
+3. Under **Permissions**, tick the `Can view <your_api_model>` row(s).
+4. Save.
+
+Now that staff user (non-superuser) can browse the changelist for the
+selected API model, but cannot mutate anything.
+
+Implementation: Django 5.2 ignores `Meta.default_permissions` and always
+auto-generates `('add', 'change', 'delete', 'view')`. We trim the
+unwanted three via a `post_migrate` signal handler in
+`apps.DjangoApiFactoryConfig.ready()` — re-runs of `manage.py migrate`
+are idempotent.
+
 ## License
 
 MIT
