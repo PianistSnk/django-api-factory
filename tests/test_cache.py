@@ -3,6 +3,12 @@
 import pytest
 from unittest.mock import patch, MagicMock
 
+# RedisCacheBackend tests require the optional 'redis' extra.
+# `pip install -e ".[dev]"` now installs it; this guard keeps the test
+# module importable (and the redis tests skipped, not failed) on systems
+# where redis is genuinely absent.
+pytest.importorskip("redis", reason="requires 'redis' (installed via `pip install -e '.[dev]'`)")
+
 from django_api_factory.mixins import (
     BaseCacheBackend,
     NullCacheBackend,

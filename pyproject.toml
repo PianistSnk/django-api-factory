@@ -31,11 +31,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-cache = ["redis>=4.0"]
+# `redis` is required by tests/test_cache.py (RedisCacheBackend unit tests).
+# Installing the dev extras gives you a runnable test suite end-to-end.
 dev = [
     "pytest>=7.0",
     "pytest-django>=4.5",
     "pytest-cov>=4.0",
+    "redis>=4.0",
 ]
 
 [tool.setuptools.packages.find]
