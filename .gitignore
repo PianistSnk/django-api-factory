@@ -14,3 +14,13 @@ htmlcov/
 example/db.sqlite3
 *.sqlite3
 *.sqlite3-journal
+
+# M0/M1 spike exploration code — kept in ~/Documents/django-api-factory-snapshots/ tarballs
+spikes/001-pure-python-orm/
+spikes/002-pandas-backed/
+spikes/003-sqlite-cache/
+spikes/004-b-plus-a-dynamic-schema/
+spikes/data/
+spikes/README.md
+spikes/VERDICT.md
+spikes/VERDICT_V2.md
