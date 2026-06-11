@@ -35,6 +35,7 @@ class PagedPost(APIModel):
 
     class Meta:
         app_label = "tests"
+        ordering = ["id"]  # silence UnorderedObjectListWarning from Paginator
 
 
 # --- get_api_urls forwards page + page_size to API (T2.1 MVP) ------------
@@ -762,13 +763,13 @@ def test_default_get_filter_choices_signature_accepts_q_offset_limit():
     from django_api_factory.admin import APIAdmin
     from django.db import models
 
-    class DistinctTestModel(models.Model):
+    class DistinctTestModelB(models.Model):  # renamed from DistinctTestModel (line 765) — was colliding with the same-named class on line 739, both ending up registered as 'tests.distincttestmodel'
         userId = models.IntegerField()
         class Meta:
             app_label = "tests"
 
     admin = APIAdmin.__new__(APIAdmin)
-    admin.model = DistinctTestModel
+    admin.model = DistinctTestModelB
     admin.expected_total = 10
     admin.filter_distinct_max_rows = 1000
     admin.filter_distinct_cache_ttl = 0

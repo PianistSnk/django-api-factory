@@ -10,7 +10,7 @@ from django_api_factory.models import APIModel
 
 # --- Test fixtures --------------------------------------------------------
 
-class TestModel(APIModel):
+class SchemaModel(APIModel):  # renamed from SchemaModel to avoid pytest collection warning
     app_label = "tests"
 
     def urls(self, **kwargs):
@@ -46,55 +46,55 @@ def registry():
 
 def test_register_adds_fields_to_model(registry):
     """First call adds the fields via add_to_class."""
-    registry.register(TestModel, ["foo", "bar", "baz"])
+    registry.register(SchemaModel, ["foo", "bar", "baz"])
     for f in ("foo", "bar", "baz"):
-        assert hasattr(TestModel, f), f"field {f!r} not on model"
+        assert hasattr(SchemaModel, f), f"field {f!r} not on model"
 
 
 def test_register_is_idempotent(registry):
     """Second register call adds nothing — same field list returns []. """
-    registry.register(TestModel, ["a", "b"])
-    added = registry.register(TestModel, ["a", "b"])
+    registry.register(SchemaModel, ["a", "b"])
+    added = registry.register(SchemaModel, ["a", "b"])
     assert added == []
 
 
 def test_register_returns_only_newly_added(registry):
     """Mixed call returns just the new fields."""
-    registry.register(TestModel, ["a", "b"])
-    added = registry.register(TestModel, ["a", "b", "c", "d"])
+    registry.register(SchemaModel, ["a", "b"])
+    added = registry.register(SchemaModel, ["a", "b", "c", "d"])
     assert sorted(added) == ["c", "d"]
 
 
 def test_is_registered(registry):
     """is_registered reports True only after register()."""
-    assert registry.is_registered(TestModel, "x") is False
-    registry.register(TestModel, ["x"])
-    assert registry.is_registered(TestModel, "x") is True
-    assert registry.is_registered(TestModel, "y") is False
+    assert registry.is_registered(SchemaModel, "x") is False
+    registry.register(SchemaModel, ["x"])
+    assert registry.is_registered(SchemaModel, "x") is True
+    assert registry.is_registered(SchemaModel, "y") is False
 
 
 def test_registered_fields(registry):
     """registered_fields returns the full set in insertion order."""
-    registry.register(TestModel, ["c", "a", "b"])
-    assert sorted(registry.registered_fields(TestModel)) == ["a", "b", "c"]
+    registry.register(SchemaModel, ["c", "a", "b"])
+    assert sorted(registry.registered_fields(SchemaModel)) == ["a", "b", "c"]
 
 
 def test_separate_models_have_separate_registries(registry):
     """One model registering fields doesn't leak to another."""
-    registry.register(TestModel, ["x"])
+    registry.register(SchemaModel, ["x"])
     registry.register(OtherModel, ["y"])
-    assert registry.is_registered(TestModel, "x")
-    assert not registry.is_registered(TestModel, "y")
+    assert registry.is_registered(SchemaModel, "x")
+    assert not registry.is_registered(SchemaModel, "y")
     assert registry.is_registered(OtherModel, "y")
     assert not registry.is_registered(OtherModel, "x")
 
 
 def test_reset_clears_all(registry):
     """reset() drops everything (useful in tests)."""
-    registry.register(TestModel, ["x"])
+    registry.register(SchemaModel, ["x"])
     registry.register(OtherModel, ["y"])
     registry.reset()
-    assert not registry.is_registered(TestModel, "x")
+    assert not registry.is_registered(SchemaModel, "x")
     assert not registry.is_registered(OtherModel, "y")
 
 
@@ -112,7 +112,7 @@ def test_concurrent_register_no_duplicate_adds(registry):
     """
     fields = ["foo", "bar", "baz", "qux", "quux"]
     threads = [
-        threading.Thread(target=registry.register, args=(TestModel, fields))
+        threading.Thread(target=registry.register, args=(SchemaModel, fields))
         for _ in range(10)
     ]
     for t in threads:
@@ -121,21 +121,21 @@ def test_concurrent_register_no_duplicate_adds(registry):
         t.join()
 
     # All 5 fields present
-    assert sorted(registry.registered_fields(TestModel)) == sorted(fields)
+    assert sorted(registry.registered_fields(SchemaModel)) == sorted(fields)
     # Set has exactly 5 entries (not duplicated)
-    assert len(registry._registry[TestModel]) == 5
+    assert len(registry._registry[SchemaModel]) == 5
 
 
 def test_concurrent_register_idempotent_returns_unchanged(registry):
     """After first register, subsequent registers return []. """
     fields = ["x", "y", "z"]
     # First register adds everything
-    added = registry.register(TestModel, fields)
+    added = registry.register(SchemaModel, fields)
     assert sorted(added) == sorted(fields)
     # Concurrent re-registers should all return [] (idempotent)
     results = []
     def worker():
-        results.append(registry.register(TestModel, fields))
+        results.append(registry.register(SchemaModel, fields))
     threads = [threading.Thread(target=worker) for _ in range(10)]
     for t in threads:
         t.start()
@@ -149,7 +149,7 @@ def test_concurrent_register_idempotent_returns_unchanged(registry):
 def test_concurrent_register_different_fields_dont_clobber(registry):
     """Threads registering disjoint field sets all stick."""
     def worker(prefix, n):
-        registry.register(TestModel, [f"{prefix}{i}" for i in range(n)])
+        registry.register(SchemaModel, [f"{prefix}{i}" for i in range(n)])
 
     threads = [threading.Thread(target=worker, args=(f"t{i}_", 5)) for i in range(4)]
     for t in threads:
@@ -159,7 +159,7 @@ def test_concurrent_register_different_fields_dont_clobber(registry):
     # All 20 fields should be present
     for i in range(4):
         for j in range(5):
-            assert registry.is_registered(TestModel, f"t{i}_{j}")
+            assert registry.is_registered(SchemaModel, f"t{i}_{j}")
 
 
 # --- Integration: module-level singleton --------------------------------

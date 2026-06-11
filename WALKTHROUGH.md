@@ -26,13 +26,13 @@ class PostAdmin(APIAdmin):
 
 访问 `/admin/api/post/`，100 行 JSONPlaceholder 数据立刻渲染成 Django admin 的 changelist——分页、过滤、搜索、详情全有。
 
-**核心价值不是"通用化框架"**——是"零摩擦 admin 工具"：一个 200 行的包，背后是 3-4 年在the team里"无前端快速开发"模式的沉淀。
+**核心价值不是"通用化框架"**——是"零摩擦 admin 工具"：一个 200 行的包，背后是 3-4 年在内部团队里"无前端快速开发"模式的沉淀。
 
 ---
 
 ## 1. 起源：3-4 年攒下的"零摩擦"经验
 
-这个项目的源头在 2022 年左右，the team里有个内部仓库 `the original code/APIFactory`（admin.py 单文件 23K，名字是the teaminternal project name）。逻辑一句话：
+这个项目的源头在 2022 年左右，团队内部有个仓库叫 `APIFactory`（admin.py 单文件 23K，原本是内部项目代号）。逻辑一句话：
 
 > **写 SQL → 抄成 Model → 改 URL → admin 抄名字写个 `pass` → 重启 → 完事**
 
@@ -42,7 +42,7 @@ class PostAdmin(APIAdmin):
 
 **为什么 2026 年要拆出来？**
 
-旧 `admin.py` 23K 写得糙，剥业务耦合成本高，没法发出去复用。**目标很朴素**：把"admin 增强"这层拆成可独立贡献的模块，让 `django-api-factory` 能脱开the team业务包、装到任何一个 Django 项目里就跑。**不是要做成"通用化大框架"**——那是另一种死法。
+旧 `admin.py` 23K 写得糙，剥业务耦合成本高，没法发出去复用。**目标很朴素**：把"admin 增强"这层拆成可独立贡献的模块，让 `django-api-factory` 能脱开内部业务包、装到任何一个 Django 项目里就跑。**不是要做成"通用化大框架"**——那是另一种死法。
 
 ---
 
@@ -95,7 +95,7 @@ class APIModel(models.Model):
 
 ### M0：浅克隆（1.5h，2026-06-05 凌晨）
 
-把老 `admin.py` 拆出来到独立包，剥 the original code 业务耦合（顿号搜索、LogEntry 审计、simpleui）。**3 个 smoke test + 2 个 e2e test 验证 `/admin/api/post/` 200**。第一次"独立包跑通"。
+把老 `admin.py` 拆出来到独立包，剥业务耦合（顿号搜索、LogEntry 审计、simpleui）。**3 个 smoke test + 2 个 e2e test 验证 `/admin/api/post/` 200**。第一次"独立包跑通"。
 
 ### M1：剥业务 + 修复 5 个历史坑（~30h，06-05 ~ 06-07）
 

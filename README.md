@@ -1,5 +1,10 @@
 # django-api-factory
 
+[![CI](https://github.com/PianistSnk/django-api-factory/actions/workflows/ci.yml/badge.svg)](https://github.com/PianistSnk/django-api-factory/actions)
+[![Coverage](https://img.shields.io/badge/coverage-72.83%25-yellowgreen.svg)](#testing)
+[![PyPI](https://img.shields.io/badge/pypi-v0.1.0--dev0-orange.svg)](#install)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 **Display any REST API as a Django admin model — no frontend, no migrations, just `urls()` and `cache()`.**
 
 Three years of production-tested code distilled into a 200-line package.
