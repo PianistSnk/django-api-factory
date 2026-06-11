@@ -103,9 +103,9 @@ class MyAuditedAdmin(AuditLogMixin, APIAdmin):
 
 Note: as of M1, the library no longer ships a built-in `view_or_download` helper — implement the file proxy in your own project and call `self.log_download(...)` from there.
 
-### 3. Modal-form actions (`ActionFormMixin`, no simpleui needed)
+### 3. Modal-form actions (`ActionFormMixin`)
 
-Add modal form + ajax submit to admin actions, with **zero** dependency on simpleui (or any other theme). The library auto-discovers any action function with a `.layer` attribute and shows a modal when the user clicks "Go" in the action dropdown.
+Add modal form + ajax submit to admin actions. The library auto-discovers any action function with a `.layer` attribute and shows a modal when the user clicks "Go" in the action dropdown.
 
 ```python
 from django_api_factory.admin import APIAdmin  # already includes ActionFormMixin
@@ -234,8 +234,8 @@ This is **opt-in** — by default `changelist_cache_enabled = False`. The librar
 ## Status
 
 - [x] **v0.1.0-dev0** — M0: shallow clone, works for read-only public APIs
-- [x] **M1 T1.1** — strip project-specific business coupling (audit log hooks + configurable multi-value separator + `ActionFormMixin` modal-form, **no simpleui required**)
-- [x] **M1 T1.2** — decouple simpleui (core does not import it) + Redis cache backend pluggable (Null/Redis/custom)
+- [x] **M1 T1.1** — strip project-specific business coupling (audit log hooks + configurable multi-value separator + `ActionFormMixin` modal-form)
+- [x] **M1 T1.2** — Redis cache backend pluggable (Null/Redis/custom)
 - [x] **M1 T1.3** — `SchemaRegistry` registers fields once (idempotent, intra-process thread-safe)
 - [x] **M1 T1.4** — `threading.Lock` in SchemaRegistry prevents concurrent `add_to_class` races
 - [x] **M1 T1.5** — `ActionFormMixin` modal-form + `changelist_cache_enabled` opt-in (default off) + `detail_cache_enabled` opt-in (default off)
