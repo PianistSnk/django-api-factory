@@ -38,6 +38,8 @@ dev = [
     "pytest-django>=4.5",
     "pytest-cov>=4.0",
     "redis>=4.0",
+    # ExportMixin.export_to_excel tests need openpyxl (tests/test_mixins.py).
+    "openpyxl>=3.0",
 ]
 
 [tool.setuptools.packages.find]
