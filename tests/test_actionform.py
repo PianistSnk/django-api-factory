@@ -2,6 +2,7 @@
 
 import json
 import pytest
+from unittest.mock import MagicMock
 from django.contrib import admin as django_admin
 from django.contrib.admin import AdminSite
 from django.test import RequestFactory
@@ -169,39 +170,6 @@ def test_action_submit_view_passes_none_when_action_returns_none(admin_with_acti
     data = json.loads(response.content)
     assert data == {"status": "success", "msg": "Success!"}
 
-
-def test_action_form_view_simpleui_style_with_width():
-    """simpleui-style layer: width, icon, type, style in the response."""
-    class InnerAdmin(ActionFormMixin, django_admin.ModelAdmin):
-        def get_queryset(self, request):
-            return MagicMock()
-
-        def supplement_remarks(self, request, queryset):
-            return None
-
-        supplement_remarks.icon = "fas fa-download"
-        supplement_remarks.type = "info"
-        supplement_remarks.style = "color:white"
-        supplement_remarks.layer = {
-            "title": "添加/更新备注",
-            "width": "40%",
-            "params": [
-                {"type": "input", "key": "remarks", "label": "添加/更新备注", "require": True}
-            ],
-        }
-
-    admin = InnerAdmin.__new__(InnerAdmin)
-    factory = RequestFactory()
-    request = factory.get("/admin/tests/widget/action-form/supplement_remarks/")
-    response = admin.action_form_view(request, "supplement_remarks")
-    data = json.loads(response.content)
-    assert data["title"] == "添加/更新备注"
-    assert data["width"] == "40%"
-    assert data["params"][0]["key"] == "remarks"
-    assert data["params"][0]["require"] is True
-    assert data["icon"] == "fas fa-download"
-    assert data["type"] == "info"
-    assert data["style"] == "color:white"
 
 
 def test_action_form_view_simpleui_style_with_width():

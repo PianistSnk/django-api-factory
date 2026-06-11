@@ -134,13 +134,11 @@ class ExportMixin:
 
 # Re-export to preserve the historical `from .admin import quote` import in
 # the original code. New code should `from urllib.parse import quote` directly.
-from urllib.parse import quote  # noqa: E402,F401
+from urllib.parse import quote  # noqa: E402, F401
 
-import json
 import logging
 from django.http import HttpResponse, JsonResponse
 from django.urls import path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -282,7 +280,7 @@ class RedisCacheBackend(BaseCacheBackend):
     def __init__(self, host: str = None, port: int = None,
                  db: int = None, password=None, socket_connect_timeout: int = 2):
         try:
-            import redis  # noqa: delayed import — keeps core redis-free
+            import redis  # delayed import — keeps core redis-free
         except ImportError as exc:
             raise ImportError(
                 "RedisCacheBackend requires redis-py: `pip install redis`"

@@ -6,18 +6,16 @@ from typing import Optional
 
 import requests
 from django.contrib import admin, messages
-from django.contrib.admin import helpers
 from django.contrib.admin.decorators import display
 from django.utils.safestring import mark_safe
 
 from django_api_factory.changelist import APIChangeList, APIADMIN_RESERVED_GET_PARAMS
-from django_api_factory.filter import APIFilter, APIMultiSelectFilter
+from django_api_factory.filter import APIFilter
 from django_api_factory.mixins import (
     ActionFormMixin,
     AuditLogMixin,
     BaseCacheBackend,
     NullCacheBackend,
-    RedisCacheBackend,
     schema_registry,
 )
 from django_api_factory.queryset import MyQuerySet
@@ -259,7 +257,6 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         """Reconstruct a model instance from a single raw API item dict.
         Mirrors the construction logic in `get_api_data`.
         """
-        from django_api_factory.mixins import schema_registry
         schema_registry.register(self.model, list(item.keys()))
         mymodel = self.model(id=int(item.get("id", 0)), pk=int(item.get("id", 0)))
         for field_name, value in item.items():
@@ -954,7 +951,6 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         # single values; old admin code assumed that.)
         paras = {k: v[0] if isinstance(v, list) else v
                  for k, v in request.GET.items()}
-        import sys
 
         order_list = paras.get("o", "").split(".") if paras.get("o") else []
         tmp_order_list = []
@@ -1143,12 +1139,10 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
                     messages.add_message(request, messages.INFO, "此列暂时无法排序")
 
         # Dynamically add fields to the model class
-        from django.db import models as dj_models
         # Register fields on the model class via the module-level
         # SchemaRegistry (T1.3). The registry is idempotent and thread-safe
         # — first request adds the fields, all subsequent requests skip
         # the add_to_class loop entirely.
-        from django_api_factory.mixins import schema_registry
         schema_registry.register(self.model, fields)
         for field_name in self.paras_list:
             if field_name not in ("q", "o") and not schema_registry.is_registered(self.model, field_name):
@@ -1166,7 +1160,7 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         # search field name and zero out the result list (`'all' in item`
         # is always False).
         from django.contrib.admin.views.main import (
-            ALL_VAR, ORDER_VAR, PAGE_VAR, SEARCH_VAR,
+            ALL_VAR, ORDER_VAR, PAGE_VAR,
         )
         reserved = {ALL_VAR, ORDER_VAR, PAGE_VAR, "dt"}
         # `SEARCH_VAR` (`q`) is NOT in `reserved` — we want the search box

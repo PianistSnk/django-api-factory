@@ -1,5 +1,4 @@
 from django.db.models import QuerySet
-import copy
 
 
 class MyQuerySet(QuerySet):

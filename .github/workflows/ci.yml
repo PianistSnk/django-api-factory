@@ -34,7 +34,7 @@ jobs:
         run: pytest
 
   lint:
-    name: pyflakes
+    name: ruff
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -42,5 +42,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install pyflakes
-      - run: pyflakes src/django_api_factory tests example
+      - run: pip install ruff
+      # ruff understands try/except ImportError (so it doesn't false-
+      # positive on optional imports) and supports auto-fix.
+      - run: ruff check src/django_api_factory

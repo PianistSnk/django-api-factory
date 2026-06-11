@@ -43,6 +43,13 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.ruff.lint]
+# mixins.py intentionally organizes imports into mid-file sections
+# (T1.3 + T1.4 schema registry code, T1.5 Redis cache backend, etc.)
+# which ruff flags as E402. The imports are real, just positioned
+# after section comments. Suppress E402 for that file only.
+per-file-ignores = { "src/django_api_factory/mixins.py" = ["E402"] }
+
 [tool.pytest.ini_options]
 addopts = [
     "--cov=django_api_factory",
