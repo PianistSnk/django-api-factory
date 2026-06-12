@@ -48,13 +48,27 @@ pip install django-api-factory
 
 ## 跑示例
 
+`examples/` 下有两个独立项目。选一个:
+
 ```bash
-cd example
+# 选 A:jsonplaceholder(公共 REST API,总 ~40 行)
+cd examples/jsonplaceholder
 pip install -r requirements.txt
 python manage.py migrate
 python manage.py createsuperuser
 python manage.py runserver
+
+# 选 B:local-mock(100k 行 + 4 种 envelope,需先起 mock server)
+cd ../..   # 回仓库根
+pip install -e .
+python spikes/big-data-mock/server.py --port 8200 --rows 100000 &
+cd examples/local-mock
+python manage.py migrate
+python manage.py createsuperuser
+python manage.py runserver
 ```
+
+或要看**一个项目里 5 个 admin 全跑**(传统 `example/`,仓库根),看 `example/README.md`。
 
 浏览器打开 `http://127.0.0.1:8000/admin/` 看效果。
 

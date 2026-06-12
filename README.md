@@ -48,13 +48,30 @@ Run `python manage.py runserver`, log in, visit `/admin/api/post/`, see your API
 pip install django-api-factory
 ```
 
-## Run the example
+## Run the examples
+
+Two standalone projects live under `examples/`. Pick one:
 
 ```bash
-cd example
-python -m venv .venv && source .venv/bin/activate
-pip install "Django>=4.2" requests
+# Option A: jsonplaceholder (public REST API, ~40 lines total)
+cd examples/jsonplaceholder
+pip install -r requirements.txt
 python manage.py migrate
+python manage.py createsuperuser
+python manage.py runserver
+
+# Option B: local-mock (100k rows + 4 envelope shapes, needs the mock server)
+cd ../..   # back to the repo root
+pip install -e .
+python spikes/big-data-mock/server.py --port 8200 --rows 100000 &
+cd examples/local-mock
+python manage.py migrate
+python manage.py createsuperuser
+python manage.py runserver
+```
+
+Or for a **combined demo of all 5 admins in one project** (the legacy
+`example/` at the repo root), see `example/README.md`.
 python manage.py createsuperuser
 python manage.py runserver
 ```
