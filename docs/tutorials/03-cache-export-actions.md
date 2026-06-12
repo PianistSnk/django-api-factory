@@ -146,7 +146,7 @@ class PostAdmin(ActionFormMixin, ExportMixin, APIAdmin):
     changelist_cache_ttl = 300
     actions = ["add_remarks"]
 
-    @admin.action(description="补充备注")
+    @admin.action(description="Add remarks")
     def add_remarks(self, request, queryset):
         remarks = request.POST.get("remarks", "")
         status = request.POST.get("status", "")
@@ -160,22 +160,22 @@ class PostAdmin(ActionFormMixin, ExportMixin, APIAdmin):
 
     # Modal form config — the action's UI.
     add_remarks.layer = {
-        "title": "补充备注",
+        "title": "Add remarks",
         "width": "480px",
         "params": [
             {"type": "input", "key": "remarks",
-             "label": "备注说明", "require": True},
+             "label": "Remarks", "require": True},
             {"type": "radio", "key": "status",
-             "label": "是否异常",
+             "label": "Is anomaly?",
              "options": [
-                 {"key": "是", "label": "是"},
-                 {"key": "否", "label": "否"},
+                 {"key": "yes", "label": "Yes"},
+                 {"key": "no", "label": "No"},
              ]},
         ],
     }
 ```
 
-Reload the admin. The actions dropdown now has "补充备注". Selecting
+Reload the admin. The actions dropdown now has "Add remarks". Selecting
 rows and clicking it pops up the modal. Fill in remarks + status,
 submit, and you'll get a success message in the admin (or your
 custom UI handling).
@@ -251,7 +251,7 @@ class PostAdmin(
 
     enable_audit_log = True
 
-    @admin.action(description="补充备注")
+    @admin.action(description="Add remarks")
     def add_remarks(self, request, queryset):
         remarks = request.POST.get("remarks", "")
         status = request.POST.get("status", "")
@@ -264,16 +264,16 @@ class PostAdmin(
         }
 
     add_remarks.layer = {
-        "title": "补充备注",
+        "title": "Add remarks",
         "width": "480px",
         "params": [
             {"type": "input", "key": "remarks",
-             "label": "备注说明", "require": True},
+             "label": "Remarks", "require": True},
             {"type": "radio", "key": "status",
-             "label": "是否异常",
+             "label": "Is anomaly?",
              "options": [
-                 {"key": "是", "label": "是"},
-                 {"key": "否", "label": "否"},
+                 {"key": "yes", "label": "Yes"},
+                 {"key": "no", "label": "No"},
              ]},
         ],
     }

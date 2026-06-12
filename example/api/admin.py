@@ -54,7 +54,7 @@ class PostAdmin(APIAdmin):
                 pass
         return valid
 
-    @admin.action(description="补充备注")
+    @admin.action(description="Add remarks")
     def add_remarks(self, request, queryset):
         remarks = request.POST.get("remarks", "")
         status = request.POST.get("status", "")
@@ -68,12 +68,12 @@ class PostAdmin(APIAdmin):
     add_remarks.type = "info"
     add_remarks.style = "color:white"
     add_remarks.layer = {
-        "title": "补充备注",
+        "title": "Add remarks",
         "width": "480px",
         "params": [
-            {"type": "input", "key": "remarks", "label": "备注说明", "require": True},
-            {"type": "radio", "key": "status", "label": "是否异常",
-             "options": [{"key": "是", "label": "是"}, {"key": "否", "label": "否"}]},
+            {"type": "input", "key": "remarks", "label": "Remarks", "require": True},
+            {"type": "radio", "key": "status", "label": "Is anomaly?",
+             "options": [{"key": "yes", "label": "Yes"}, {"key": "no", "label": "No"}]},
         ],
     }
 

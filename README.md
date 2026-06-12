@@ -134,7 +134,7 @@ from django_api_factory.admin import APIAdmin  # already includes ActionFormMixi
 class PostAdmin(APIAdmin):
     actions = ["add_remarks"]
 
-    @admin.action(description="补充备注")
+    @admin.action(description="Add remarks")
     def add_remarks(self, request, queryset):
         remarks = request.POST.get("remarks", "")
         status = request.POST.get("status", "")
@@ -143,11 +143,11 @@ class PostAdmin(APIAdmin):
 
     # .layer schema is rendered as a modal; user's input lands in request.POST
     add_remarks.layer = {
-        "title": "补充备注",
+        "title": "Add remarks",
         "params": [
-            {"type": "input", "key": "remarks", "label": "备注", "require": False},
-            {"type": "radio", "key": "status", "label": "是否异常",
-             "options": [{"key": "yes", "label": "是"}, {"key": "no", "label": "否"}]},
+            {"type": "input", "key": "remarks", "label": "Remarks", "require": False},
+            {"type": "radio", "key": "status", "label": "Is anomaly?",
+             "options": [{"key": "yes", "label": "Yes"}, {"key": "no", "label": "No"}]},
         ],
     }
 ```
