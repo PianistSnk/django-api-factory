@@ -1,0 +1,140 @@
+name: Publish to PyPI
+
+# Auto-publish workflow — trigger: push a tag matching v* (e.g. v0.1.0)
+#
+# What it does:
+# 1. Build sdist + wheel via `python -m build`
+# 2. Publish to PyPI via `twine upload` (uses PYPI_API_TOKEN secret)
+# 3. Create a GitHub Release with the wheel + sdist attached
+#
+# Setup (one-time, repo admin):
+#   1. Create a PyPI API token at https://pypi.org/manage/account/token/
+#      - Scope: "Project: django-api-factory" (after first manual upload)
+#      - Or "Account-wide" for the first publish
+#   2. Add it as a GitHub repo secret named `PYPI_API_TOKEN`:
+#      https://github.com/PianistSnk/django-api-factory/settings/secrets/actions
+#   3. Bump the version in pyproject.toml + commit + push
+#   4. Tag: `git tag v0.1.0 && git push origin v0.1.0`
+#   5. The workflow runs, builds, publishes, opens a release. Done.
+#
+# To do a DRY-RUN (build but don't publish):
+#   - Run the workflow manually via the "Run workflow" button on
+#     https://github.com/PianistSnk/django-api-factory/actions/workflows/publish.yml
+#     The `environment` input controls `testpypi` vs `pypi`.
+#
+# Why not Test PyPI first?
+#   The project has been wheel-built locally and verified to install
+#   + import + render the example admin (committed in
+#   d64bfeb+). A first-cut publish goes to Test PyPI; once that's
+#   confirmed working, the same workflow can target PyPI for real.
+#   See `.github/workflows/publish-testpypi.yml` for the dry-run.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        default: "pypi"
+        options:
+          - "pypi"
+          - "testpypi"
+
+jobs:
+  build:
+    name: Build sdist + wheel
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+
+      - name: Build sdist + wheel
+        run: python -m build
+
+      - name: Check dist with twine
+        run: twine check dist/*
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish to ${{ github.event.inputs.environment || 'pypi' }}
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment || 'pypi' }}
+      url: ${{ github.event.inputs.environment == 'testpypi' && 'https://test.pypi.org/project/django-api-factory/' || 'https://pypi.org/project/django-api-factory/' }}
+    permissions:
+      id-token: write  # for PyPI trusted publishing (OIDC)
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      # Use PyPI's OIDC trusted publishing (no API token needed in CI).
+      # Set up the trusted publisher at:
+      #   https://pypi.org/manage/account/publishing/
+      # with:
+      #   Owner: PianistSnk
+      #   Repository: django-api-factory
+      #   Workflow filename: publish.yml
+      #   Environment name: pypi (or testpypi)
+      - name: Publish to PyPI via OIDC
+        if: ${{ github.event.inputs.environment == 'pypi' || github.event.inputs.environment == '' || github.event_name == 'push' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: ${{ github.event.inputs.environment == 'testpypi' && 'https://test.pypi.org/legacy/' || 'https://upload.pypi.org/legacy/' }}
+
+      # Fallback: API token from secret. Use this if OIDC isn't set up
+      # (comment the OIDC step above and uncomment this).
+      # - name: Publish to PyPI via API token
+      #   env:
+      #     TWINE_USERNAME: __token__
+      #     TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+      #   run: |
+      #     python -m pip install --upgrade twine
+      #     twine upload dist/*
+
+  release:
+    name: Create GitHub Release
+    needs: publish
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write  # to create the release
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

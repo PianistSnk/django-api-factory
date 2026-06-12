@@ -24,3 +24,8 @@ spikes/data/
 spikes/README.md
 spikes/VERDICT.md
 spikes/VERDICT_V2.md
+
+
+# mkdocs build output
+/site/
+/docs/examples/  # mirror of examples/ (kept in sync via `make docs-sync` or manual `cp`)
