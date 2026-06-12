@@ -8,7 +8,7 @@ from django.contrib import admin
 
 from django_api_factory.admin import APIAdmin
 
-from .models import BigPost, Post, User
+from .models import BigPost, Post, PostBare, PostData, PostItems, PostResults, User
 
 
 # --- Re-register Post/User with the same UX as before --------------------
@@ -217,3 +217,52 @@ class BigPostAdmin(APIAdmin):
         h = hashlib.md5(field_name.encode("utf-8")).hexdigest()[:12]
         limit = getattr(self, "filter_distinct_limit", 0)
         return f"distinct:{self.model._meta.label_lower}:l{limit}:{h}"
+
+
+# --- Jun 2026: 4 envelope-shape demo admins ------------------------------
+# Each admin is the minimal config needed to prove
+# APIModel.parse_response auto-handles its envelope shape — no
+# per-admin override, no per-admin field mapping. Just declare
+# `expected_total` and let the default parse_response do the work.
+#
+# Verify in the browser: /admin/api/postbare/ /postdata/ /postitems/
+# /postresults/ — all 4 should render the first 50 rows from
+# http://127.0.0.1:8200/posts-{bare,data,items,results} respectively.
+
+
+class _EnvelopeShapeAdmin(APIAdmin):
+    """Shared base for the 4 envelope demo admins.
+
+    All 4 inherit the default APIModel.parse_response (no override)
+    and just point at a different mock-server path. The point: zero
+    per-admin boilerplate to support a new envelope shape.
+    """
+    list_display = ["__str__"]
+    list_display_links = ["__str__"]
+    list_per_page = 50
+    list_filter = []  # keep it minimal for the demo
+    expected_total = 100  # matches mock server --rows 100
+
+
+@admin.register(PostBare)
+class PostBareAdmin(_EnvelopeShapeAdmin):
+    """Envelope: bare list — REST canonical."""
+    pass
+
+
+@admin.register(PostData)
+class PostDataAdmin(_EnvelopeShapeAdmin):
+    """Envelope: {"data": [...]}."""
+    pass
+
+
+@admin.register(PostItems)
+class PostItemsAdmin(_EnvelopeShapeAdmin):
+    """Envelope: {"items": [...]}."""
+    pass
+
+
+@admin.register(PostResults)
+class PostResultsAdmin(_EnvelopeShapeAdmin):
+    """Envelope: {"results": [...]} (DRF default)."""
+    pass

@@ -93,3 +93,101 @@ class BigPost(APIModel):
     class Meta(APIModel.Meta):
         verbose_name = "大数据 Post (M2 spike)"
         verbose_name_plural = "大数据 Post (M2 spike)"
+
+
+# --- Jun 2026: 4 envelope-shape demo models ------------------------------
+# The local mock server (`spikes/big-data-mock/server.py`) exposes the
+# same dataset under 4 different envelope shapes so we can verify
+# APIModel.parse_response handles all 4 with the default impl (no
+# override required). Each model points at a different /posts-XYZ path
+# and inherits the same default parse_response, but routes the URL to a
+# different envelope. Together they prove "one admin can speak 4 industry
+# response shapes without per-admin boilerplate".
+
+
+class PostBare(APIModel):
+    """Envelope shape #1: bare list (REST canonical — jsonplaceholder etc.)"""
+
+    @classmethod
+    def urls(cls, page=1, page_size=50, **kwargs) -> str:
+        from urllib.parse import quote
+        qs = [f"page={page}", f"page_size={page_size}"]
+        for k, v in kwargs.items():
+            if v in (None, ""):
+                continue
+            qs.append(f"{k}={quote(str(v), safe='')}")
+        return "http://127.0.0.1:8200/posts-bare?" + "&".join(qs)
+
+    @classmethod
+    def cache(cls, **kwargs):
+        return None
+
+    class Meta(APIModel.Meta):
+        verbose_name = "Post (envelope: bare list)"
+        verbose_name_plural = "Post (envelope: bare list)"
+
+
+class PostData(APIModel):
+    """Envelope shape #2: {"data": [...]} (Laravel / internal APIs)"""
+
+    @classmethod
+    def urls(cls, page=1, page_size=50, **kwargs) -> str:
+        from urllib.parse import quote
+        qs = [f"page={page}", f"page_size={page_size}"]
+        for k, v in kwargs.items():
+            if v in (None, ""):
+                continue
+            qs.append(f"{k}={quote(str(v), safe='')}")
+        return "http://127.0.0.1:8200/posts-data?" + "&".join(qs)
+
+    @classmethod
+    def cache(cls, **kwargs):
+        return None
+
+    class Meta(APIModel.Meta):
+        verbose_name = "Post (envelope: {data: [...]})"
+        verbose_name_plural = "Post (envelope: {data: [...]})"
+
+
+class PostItems(APIModel):
+    """Envelope shape #3: {"items": [...]} (older internal APIs)"""
+
+    @classmethod
+    def urls(cls, page=1, page_size=50, **kwargs) -> str:
+        from urllib.parse import quote
+        qs = [f"page={page}", f"page_size={page_size}"]
+        for k, v in kwargs.items():
+            if v in (None, ""):
+                continue
+            qs.append(f"{k}={quote(str(v), safe='')}")
+        return "http://127.0.0.1:8200/posts-items?" + "&".join(qs)
+
+    @classmethod
+    def cache(cls, **kwargs):
+        return None
+
+    class Meta(APIModel.Meta):
+        verbose_name = "Post (envelope: {items: [...]})"
+        verbose_name_plural = "Post (envelope: {items: [...]})"
+
+
+class PostResults(APIModel):
+    """Envelope shape #4: {"results": [...]} (Django REST Framework)"""
+
+    @classmethod
+    def urls(cls, page=1, page_size=50, **kwargs) -> str:
+        from urllib.parse import quote
+        qs = [f"page={page}", f"page_size={page_size}"]
+        for k, v in kwargs.items():
+            if v in (None, ""):
+                continue
+            qs.append(f"{k}={quote(str(v), safe='')}")
+        return "http://127.0.0.1:8200/posts-results?" + "&".join(qs)
+
+    @classmethod
+    def cache(cls, **kwargs):
+        return None
+
+    class Meta(APIModel.Meta):
+        verbose_name = "Post (envelope: {results: [...]})"
+        verbose_name_plural = "Post (envelope: {results: [...]})"

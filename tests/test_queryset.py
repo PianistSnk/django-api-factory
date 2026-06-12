@@ -148,3 +148,45 @@ def test_cache_preserving_method_returns_cloned_queryset_with_same_cache(method_
     assert result._result_cache is cache
     # Original cache is untouched
     assert qs._result_cache is cache
+
+
+
+# --- ordered=True flag (Jun 2026 UnorderedObjectListWarning fix) -------
+
+
+def test_myqueryset_reports_ordered_true():
+    """MyQuerySet.ordered must be True so Django Paginator's
+    `UnorderedObjectListWarning` doesn't fire on every changelist
+    render. False positive: APIAdmin.get_api_data already sorts
+    the cache (id-asc by default; user-driven ?o= parsed separately),
+    so the cache IS ordered — we just need to tell Paginator.
+
+    Regression test: if someone removes the `ordered = True` class
+    attr from MyQuerySet, this test fails before any user hits the
+    warning in production.
+    """
+    from django_api_factory.queryset import MyQuerySet
+    assert MyQuerySet.ordered is True
+
+
+def test_myqueryset_ordered_true_silences_paginator_warning():
+    """End-to-end: paginating a MyQuerySet (with a populated
+    `_result_cache`) must NOT raise UnorderedObjectListWarning,
+    even when the cache is plain dicts (no implicit ordering)."""
+    import warnings
+    from django.core.paginator import Paginator, UnorderedObjectListWarning
+    from django_api_factory.queryset import MyQuerySet
+
+    # Build a MyQuerySet with a cache that has no natural ordering
+    # (just dicts in insertion order — could be anything from the API)
+    qs = MyQuerySet.__new__(MyQuerySet)
+    qs._result_cache = [{"id": 3}, {"id": 1}, {"id": 2}]
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", UnorderedObjectListWarning)
+        p = Paginator(qs, 1)
+        _ = p.count
+        _ = p.num_pages
+    # None of the captured warnings should be UnorderedObjectListWarning
+    bad = [w for w in caught if issubclass(w.category, UnorderedObjectListWarning)]
+    assert bad == [], f"got {len(bad)} UnorderedObjectListWarning(s): {[str(w.message) for w in bad]}"

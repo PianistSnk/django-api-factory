@@ -787,7 +787,11 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         if page < 1:
             page = 1
         # Forward everything except the admin's own display params.
-        forwarded = {k: v for k, v in paras.items() if k not in ("p", "per_page")}
+        # `o` is Django admin's column-order token; when server-side sort
+        # is available we translate it to `_sort` / `_order` above.
+        forwarded = {
+            k: v for k, v in paras.items() if k not in ("p", "per_page", "o")
+        }
         forwarded["page"] = page
         forwarded["page_size"] = per_page
         try:

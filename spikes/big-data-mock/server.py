@@ -116,6 +116,45 @@ class MockHandler(BaseHTTPRequestHandler):
         sys.stderr.flush()
 
     def do_GET(self):
+        # Envelope-shape endpoints (Jun 2026 — APIModel.parse_response
+        # supports 4 industry-standard shapes). Hit each one with a
+        # matching admin class to verify the unwrap hook handles all
+        # four correctly. Same data as /posts, different envelope.
+        # 4 alias paths, each returning a different envelope shape:
+        #   /posts-bare     → bare list                [{...}, ...]
+        #   /posts-data     → {"data": [...]}          (Laravel/internal)
+        #   /posts-items    → {"items": [...]}         (older internal)
+        #   /posts-results  → {"results": [...]}       (DRF default)
+        if self.path.startswith(("/posts-bare", "/posts-data",
+                                  "/posts-items", "/posts-results")):
+            from urllib.parse import urlparse, parse_qs
+            parsed = urlparse(self.path)
+            qs = parse_qs(parsed.query)
+            page = int((qs.get("page") or qs.get("_page") or ["1"])[0])
+            limit = int((qs.get("page_size") or qs.get("_limit") or ["10"])[0])
+            sliced = DATA["posts"][(page - 1) * limit: page * limit]
+            shape = parsed.path.lstrip("/")  # e.g. "posts-data" (no query)
+            if shape == "posts-bare":
+                body = json.dumps(sliced).encode("utf-8")
+            elif shape == "posts-data":
+                body = json.dumps({"data": sliced}).encode("utf-8")
+            elif shape == "posts-items":
+                body = json.dumps({"items": sliced}).encode("utf-8")
+            elif shape == "posts-results":
+                body = json.dumps({"count": len(DATA["posts"]),
+                                   "next": None, "previous": None,
+                                   "results": sliced}).encode("utf-8")
+            else:
+                self.send_error(404, f"Unknown envelope shape: {shape!r}")
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("X-Total-Count", str(len(DATA["posts"])))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
+            return
         # /distinct?field=X[&limit=N&offset=M] (Jun 2026 filter-distinct,
         # capped). Returns distinct values for a field across the entire
         # dataset, optionally paginated. Without this, ?userId= dropdown
@@ -302,6 +341,7 @@ def main():
     server = ThreadingHTTPServer((args.host, args.port), MockHandler)
     print(f"Mock server listening on http://{args.host}:{args.port}")
     print(f"  Try: curl 'http://{args.host}:{args.port}/posts?_page=1&_limit=10'")
+    print(f"  4 envelope shapes: /posts-bare /posts-data /posts-items /posts-results")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
