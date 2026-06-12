@@ -5,9 +5,13 @@
 [![PyPI](https://img.shields.io/badge/pypi-v0.1.0--dev0-orange.svg)](#install)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+[English](README.md) | [中文](README.zh-CN.md)
+
 **Display any REST API as a Django admin model — no frontend, no migrations, just `urls()` and `cache()`.**
 
 Three years of production-tested code distilled into a 200-line package.
+
+📖 **Tutorials** — [1. Hello, APIModel (15 min)](docs/tutorials/01-hello-apimodel.md) · [2. Filter, search, sort (20 min)](docs/tutorials/02-filter-search-sort.md) · [3. Cache, export, custom actions (25 min)](docs/tutorials/03-cache-export-actions.md)
 
 ## Why
 
