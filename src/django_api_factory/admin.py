@@ -545,7 +545,17 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
                 if resp.status_code != 200:
                     break
                 data_raw = resp.json()
-                if isinstance(data_raw, dict) and "data" in data_raw:
+                # Unwrap envelope: prefer APIModel.parse_response (4 standard
+                # shapes). Fall back to the legacy unwrap so non-APIModel
+                # models (e.g. test fixtures using plain `models.Model`)
+                # still work without an explicit override.
+                _parse = getattr(self.model, "parse_response", None)
+                if callable(_parse):
+                    try:
+                        data_raw = _parse(data_raw)
+                    except ValueError:
+                        break
+                elif isinstance(data_raw, dict) and "data" in data_raw:
                     data_raw = data_raw["data"].get("items", [])
                 if not data_raw:
                     break
@@ -1054,7 +1064,18 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
                 )
                 if response.status_code == 200:
                     data = json.loads(response.content)
-                    if isinstance(data, dict) and "data" in data:
+                    # Unwrap envelope: prefer APIModel.parse_response (4 standard
+                    # shapes). Fall back to the legacy unwrap so non-APIModel
+                    # models (e.g. test fixtures using plain `models.Model`)
+                    # still work without an explicit override.
+                    _parse = getattr(self.model, "parse_response", None)
+                    if callable(_parse):
+                        try:
+                            data = _parse(data)
+                        except ValueError as exc:
+                            logger.warning("APIAdmin.get_api_data: %s", exc)
+                            return None
+                    elif isinstance(data, dict) and "data" in data:
                         data = data["data"].get("items", [])
                     self.json_to_filter = data
                     # X-Total-Count (Jun 2026 cross-page filter): real APIs
