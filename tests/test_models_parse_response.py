@@ -104,7 +104,7 @@ def test_parse_response_flattens_nested_rows():
             "id": 1,
             "companyName": "Acme",
             "companyAddressCity": "Paris",
-            "tags": "vip、trial",
+            "tags": "vip\u3001trial",
         }
     ]
 
@@ -153,7 +153,7 @@ def test_parse_response_unknown_nested_envelope_raises():
     msg = str(exc_info.value)
     assert "_DemoModel.parse_response" in msg
     assert "payload" in msg  # the offending key shows up in the example
-    assert "override APIModel.parse_response" in msg  # actionable guidance
+    assert "Override APIModel.parse_response" in msg  # actionable guidance
 
 
 def test_parse_response_envelope_with_non_list_value_raises():

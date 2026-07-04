@@ -50,8 +50,8 @@ class BigPost(APIModel):
         return None
 
     class Meta(APIModel.Meta):
-        verbose_name = "大数据 Post (M2 spike)"
-        verbose_name_plural = "大数据 Post (M2 spike)"
+        verbose_name = "Big data post (M2 spike)"
+        verbose_name_plural = "Big data posts (M2 spike)"
 
 
 class DummyJSONUser(APIModel):
@@ -60,8 +60,8 @@ class DummyJSONUser(APIModel):
     url = "https://dummyjson.com/users?limit=1000"
 
     class Meta(APIModel.Meta):
-        verbose_name = "真实 DummyJSON 用户 API (wide)"
-        verbose_name_plural = "真实 DummyJSON 用户 API (wide)"
+        verbose_name = "Real DummyJSON user API (wide)"
+        verbose_name_plural = "Real DummyJSON user API (wide)"
 
 
 def _mock_url(path: str, page: int, page_size: int, **kwargs) -> str:

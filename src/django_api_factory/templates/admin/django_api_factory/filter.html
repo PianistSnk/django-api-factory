@@ -1,6 +1,6 @@
 {% load i18n %}
 {% comment %}
-Multi-select: checkbox + label. JS in change_list.html collects checked `data-value`s and builds the `?field=v1,v2,v3` URL on 确定 click.
+Multi-select: checkbox + label. JS in change_list.html collects checked `data-value`s and builds the `?field=v1,v2,v3` URL on Apply click.
 {% endcomment %}
 <details name="filter-inline-group" class="filter-inline {% if spec.is_multi %}filter-inline-multi{% else %}filter-inline-single{% endif %}{% if spec.lookup_val %} filter-inline-active{% endif %}" data-filter-title="{{ title }}" data-filter-label="{{ spec.field.verbose_name }}" data-filter-total="{{ spec.total_count|default:0 }}" data-filter-field="{{ spec.field_path }}" data-multi="{{ spec.is_multi|yesno:'true,false' }}">
   <summary class="filter-trigger">
@@ -22,7 +22,7 @@ Multi-select: checkbox + label. JS in change_list.html collects checked `data-va
     {% endif %}
   </summary>
   <div class="filter-popup">
-    <input type="text" class="filter-inline-search" placeholder="筛选 {{ title }}..." />
+    <input type="text" class="filter-inline-search" placeholder="Filter {{ title }}..." />
     <ul class="filter-inline-list" data-offset="0" data-total="{{ spec.total_count|default:0 }}">
       {% for choice in choices %}
         <li{% if choice.selected %} class="selected"{% endif %}>
@@ -47,12 +47,12 @@ Multi-select: checkbox + label. JS in change_list.html collects checked `data-va
     rendered when the search box produces more matches than fit
     in one page.
     {% endcomment %}
-    <button type="button" class="filter-inline-load-more" data-loading="false" style="display: none;">加载更多…</button>
+    <button type="button" class="filter-inline-load-more" data-loading="false" style="display: none;">Load more...</button>
     <span class="filter-inline-status" style="display: none;"></span>
     {% if spec.is_multi %}
       <div class="filter-popup-actions">
-        <button type="button" class="filter-inline-apply">确定</button>
-        <button type="button" class="filter-inline-clear">清空</button>
+        <button type="button" class="filter-inline-apply">Apply</button>
+        <button type="button" class="filter-inline-clear">Clear</button>
       </div>
     {% endif %}
   </div>

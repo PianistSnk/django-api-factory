@@ -57,7 +57,7 @@ def item_admin():
     inst.request_timeout = 10
     inst.paras_list = ["q", "o", "dt", "p"]
     inst.date_params = []
-    inst.multi_value_separator = "、"
+    inst.multi_value_separator = "\u3001"
     inst.list_per_page = 10
     inst.search_fields = []
     inst.actions = []

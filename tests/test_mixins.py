@@ -48,9 +48,9 @@ def test_apiadmin_inherits_auditlogmixin():
 
 
 def test_multi_value_separator_default():
-    """Default uses 顿号 (project convention)."""
+    """Default uses the legacy CJK list delimiter."""
     from django_api_factory.admin import APIAdmin
-    assert APIAdmin.multi_value_separator == "、"
+    assert APIAdmin.multi_value_separator == "\u3001"
 
 
 def test_multi_value_separator_override():
@@ -68,7 +68,7 @@ def test_multi_value_separator_override():
 
 
 def test_handle_search_condition_uses_configured_separator():
-    """handle_search_condition should use self.multi_value_separator, not hardcoded 顿号."""
+    """handle_search_condition should use self.multi_value_separator."""
     # Direct unit test of the splitter logic (mirrors what the nested function does)
     from django_api_factory.admin import APIAdmin
 
@@ -149,8 +149,8 @@ def test_parse_dt_admin_date_hierarchy_format():
     """Django admin sends '<relative-word> <Mon DD YYYY>' — strip first token."""
     from django_api_factory.admin import APIAdmin
     a = _make_admin_subclass({})
-    assert a.parse_dt("今天 Jun 5 2026") == "20260605"
-    assert a.parse_dt("昨天 Jun 4 2026") == "20260604"
+    assert a.parse_dt("Today Jun 5 2026") == "20260605"
+    assert a.parse_dt("Yesterday Jun 4 2026") == "20260604"
 
 
 def test_parse_dt_pure_date_string():
@@ -172,29 +172,34 @@ def test_parse_dt_unparseable_returns_empty():
 def test_parse_paras_date_params_converted():
     """parse_paras converts declared date_params, leaves others alone."""
     a = _make_admin_subclass({"date_params": ["dt", "dt_e"]})
-    out = a.parse_paras({"dt": "今天 Jun 5 2026", "dt_e": "今天 Jun 4 2026", "flag": "0", "q": "foo"})
+    out = a.parse_paras({
+        "dt": "Today Jun 5 2026",
+        "dt_e": "Today Jun 4 2026",
+        "flag": "0",
+        "q": "foo",
+    })
     assert out == {"dt": "20260605", "dt_e": "20260604", "flag": "0", "q": "foo"}
 
 
 def test_parse_paras_no_date_params_returns_copy():
     """If date_params is empty, parse_paras just copies the dict (no parsing)."""
     a = _make_admin_subclass({})  # default date_params = []
-    out = a.parse_paras({"dt": "今天 Jun 5 2026", "flag": "0"})
-    assert out == {"dt": "今天 Jun 5 2026", "flag": "0"}
+    out = a.parse_paras({"dt": "Today Jun 5 2026", "flag": "0"})
+    assert out == {"dt": "Today Jun 5 2026", "flag": "0"}
 
 
 def test_parse_paras_does_not_mutate_input():
     """parse_paras returns a new dict, doesn't mutate the caller's dict."""
     a = _make_admin_subclass({"date_params": ["dt"]})
-    original = {"dt": "今天 Jun 5 2026", "flag": "0"}
+    original = {"dt": "Today Jun 5 2026", "flag": "0"}
     a.parse_paras(original)
-    assert original == {"dt": "今天 Jun 5 2026", "flag": "0"}  # unchanged
+    assert original == {"dt": "Today Jun 5 2026", "flag": "0"}  # unchanged
 
 
 def test_parse_paras_missing_date_param_unchanged():
     """If a date_param is not in paras, the result omits it (not in dict)."""
     a = _make_admin_subclass({"date_params": ["dt", "dt_e"]})
-    out = a.parse_paras({"dt": "今天 Jun 5 2026"})
+    out = a.parse_paras({"dt": "Today Jun 5 2026"})
     assert out == {"dt": "20260605"}  # dt_e not in result
 
 
@@ -206,7 +211,7 @@ def test_handle_search_condition_single_numeric_exact_match():
     After the fix: single term, no separator → EXACT equality with
     int coercion so numeric fields match by value."""
     from django_api_factory.admin import _handle_search_condition
-    sep = "、"
+    sep = "\u3001"
 
     # The exact bug case — userId=1 must NOT match userId=10
     assert _handle_search_condition(10, ["1"], sep) is False
@@ -224,7 +229,7 @@ def test_handle_search_condition_single_string_exact_match():
     matches title='foo' but NOT title='foobar' (the previous substring
     match would have incorrectly included 'foobar')."""
     from django_api_factory.admin import _handle_search_condition
-    sep = "、"
+    sep = "\u3001"
 
     assert _handle_search_condition("foo", ["foo"], sep) is True
     assert _handle_search_condition("foobar", ["foo"], sep) is False
@@ -236,7 +241,7 @@ def test_handle_search_condition_int_vs_string_value():
     """API may return userId as int (10) while URL param is string ('10').
     int coercion normalizes both sides so they match."""
     from django_api_factory.admin import _handle_search_condition
-    sep = "、"
+    sep = "\u3001"
 
     assert _handle_search_condition(10, ["10"], sep) is True  # int item, str term
     assert _handle_search_condition("10", ["10"], sep) is True  # both str
@@ -256,32 +261,32 @@ def test_handle_search_condition_multiterm_or_equals():
 
 
 def test_handle_search_condition_multivalued_cell_with_separator():
-    """Multi-valued cells like '苹果、香蕉' compare canonically against
-    the search terms. Item '苹果、香蕉' matches search ['苹果']; item
-    '苹果' (no separator) also matches ['苹果']."""
+    """Multi-valued cells compare canonically against search terms."""
     from django_api_factory.admin import _handle_search_condition
-    sep = "、"
+    sep = "\u3001"
 
-    # Cell with separator: "苹果、香蕉" split-sorted-joined → canonical
-    # "苹果、香蕉"; search term is single "苹果" (no sep in term)
-    # → falls to the single-term branch → exact string equality.
+    # A separated cell falls to the single-term branch for exact equality.
     # NOTE: this is exact match, not "any of the cell values", by design
     # (the URL param IS the cell value the user picked from the filter).
-    assert _handle_search_condition("苹果、香蕉", ["苹果"], sep) is False  # full string compare
-    assert _handle_search_condition("苹果", ["苹果"], sep) is True
+    assert _handle_search_condition(f"apple{sep}banana", ["apple"], sep) is False
+    assert _handle_search_condition("apple", ["apple"], sep) is True
 
-    # Multi-term with separator: search ['苹果', '香蕉'] (sep "、" in terms)
-    # → OR-equals: matches if cell EQUALS any term.
-    assert _handle_search_condition("苹果", ["苹果", "香蕉"], sep) is True
-    assert _handle_search_condition("香蕉", ["苹果", "香蕉"], sep) is True
-    assert _handle_search_condition("葡萄", ["苹果", "香蕉"], sep) is False
+    # Multi-term search uses OR-equals.
+    assert _handle_search_condition("apple", ["apple", "banana"], sep) is True
+    assert _handle_search_condition("banana", ["apple", "banana"], sep) is True
+    assert _handle_search_condition("grape", ["apple", "banana"], sep) is False
 
 
 # ============================================================================
 # ExportMixin.export_to_excel  (mixins.py line 104-132)
 # ============================================================================
 
-def _make_export_admin(*, fields=("id", "name"), rows=None, model_verbose_name="widget"):
+def _make_export_admin(
+    *,
+    fields=("id", "name"),
+    rows=None,
+    model_verbose_name="widget",
+):
     """Construct an ExportMixin-flavored admin with __new__ (no Django init)."""
     admin = ExportMixin.__new__(ExportMixin)
     admin.model = MagicMock()
@@ -614,4 +619,3 @@ def test_action_submit_select_across_one_skips_pk_filter():
     )
     admin.action_submit_view(request, "my_action")
     qs.filter.assert_not_called()
-

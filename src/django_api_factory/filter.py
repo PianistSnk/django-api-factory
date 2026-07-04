@@ -25,7 +25,9 @@ class APIFilter(AllValuesFieldListFilter):
             self.empty_value_display = model_admin.get_empty_value_display()
         self.lookup_kwarg = field_path
         self.lookup_kwarg_isnull = "%s__isnull" % field_path
-        self.lookup_val = self._first_lookup_value(original_params.get(self.lookup_kwarg))
+        self.lookup_val = self._first_lookup_value(
+            original_params.get(self.lookup_kwarg)
+        )
         self.lookup_val_isnull = self._first_lookup_value(
             original_params.get(self.lookup_kwarg_isnull)
         )
@@ -93,16 +95,18 @@ class APIFilter(AllValuesFieldListFilter):
                 pass  # fall through to legacy path
         # Legacy fallback: distinct values from the current API page.
         source = (getattr(model_admin, "json_to_filter", None) or [])
-        values = self._dedup_and_normalize(field, (obj.get(field.name) for obj in source))
+        values = self._dedup_and_normalize(
+            field,
+            (obj.get(field.name) for obj in source),
+        )
         return values, len(values)
 
     def _dedup_and_normalize(self, field, values):
         # Use a set for O(1) membership checks instead of `value not
         # in out` against a list (which is O(n) and makes the whole
         # dedup O(n²) — 10k unique values = 100M comparisons, 5-10s
-        # in pure Python). For values containing 顿号 (、) we
-        # canonicalize to sorted-joined form so {苹果、香蕉} and
-        # {香蕉、苹果} collapse to the same set.
+        # in pure Python). Values containing the configured multi-value
+        # separator are canonicalized so different orders collapse.
         seen = set()
         out = []
         for value in values:
@@ -150,7 +154,7 @@ class APIFilter(AllValuesFieldListFilter):
 
 class APIMultiSelectFilter(APIFilter):
     """Multi-select variant of APIFilter. Renders checkboxes plus an
-    "确定" / "清空" pair (modeled after simpleui's filter bar — pick
+    "Apply" / "Clear" pair (modeled after simpleui's filter bar — pick
     many, commit in one click). URL format: ``?field=v1,v2,v3`` (a
     comma-separated list), which the in-memory filter in
     ``APIAdmin.get_api_data`` already handles as OR semantics via
@@ -172,7 +176,7 @@ class APIMultiSelectFilter(APIFilter):
     def choices(self, changelist):
         selected_values = set(self.selected_values)
         for index, choice in enumerate(super().choices(changelist)):
-            # Multi-select uses the explicit "清空" action instead of an
+            # Multi-select uses the explicit "Clear" action instead of an
             # "All" row. Keeping the "All" row as a checkbox would submit
             # `?field=All`, which is never a real data value.
             if index == 0:

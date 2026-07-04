@@ -50,41 +50,42 @@ def _make_filter(json_to_filter, params=None, filter_class=APIFilter):
 def test_filter_deduplicates_choices():
     """APIFilter collects unique values from json_to_filter, dedupes duplicates."""
     f, _, _ = _make_filter([
-        {"category": "苹果"},
-        {"category": "香蕉"},
-        {"category": "苹果"},
+        {"category": "apple"},
+        {"category": "banana"},
+        {"category": "apple"},
     ])
     # `lookup_choices` is a list of RAW VALUES (not (value, value) tuples)
     # — `AllValuesFieldListFilter.choices()` iterates `for val in ...` and
     # does `val = str(val)`. Tuples render as the Python repr "(x, x)" and
     # become unparseable in the URL.
-    assert "苹果" in f.lookup_choices
-    assert "香蕉" in f.lookup_choices
+    assert "apple" in f.lookup_choices
+    assert "banana" in f.lookup_choices
     assert len(f.lookup_choices) == 2
 
 
-def test_filter_splits_chinese_comma_separated_values():
-    """Values containing 顿号 (、) are split + sorted + deduped."""
+def test_filter_splits_configured_multi_value_separator():
+    """Values containing the configured separator are split + deduped."""
+    sep = "\u3001"
     f, _, _ = _make_filter([
-        {"category": "苹果、香蕉"},
-        {"category": "香蕉、苹果"},  # same set, different order
+        {"category": f"apple{sep}banana"},
+        {"category": f"banana{sep}apple"},  # same set, different order
     ])
-    # Both rows collapse to "苹果、香蕉" (sorted) — appear once
-    assert "苹果、香蕉" in f.lookup_choices
+    # Both rows collapse to the same sorted representation.
+    assert f"apple{sep}banana" in f.lookup_choices
     assert len(f.lookup_choices) == 1
 
 
 def test_filter_setup_lookup_kwargs():
     """The filter exposes lookup_kwarg / lookup_kwarg_isnull for URL building."""
-    f, _, _ = _make_filter([{"category": "苹果"}])
+    f, _, _ = _make_filter([{"category": "apple"}])
     assert f.lookup_kwarg == "category"
     assert f.lookup_kwarg_isnull == "category__isnull"
 
 
 def test_filter_reads_lookup_val_from_params():
-    """If `?category=苹果` is in the URL, lookup_val picks it up."""
-    f, _, _ = _make_filter([{"category": "苹果"}], params={"category": "苹果"})
-    assert f.lookup_val == "苹果"
+    """If `?category=apple` is in the URL, lookup_val picks it up."""
+    f, _, _ = _make_filter([{"category": "apple"}], params={"category": "apple"})
+    assert f.lookup_val == "apple"
 
 
 def test_filter_choice_links_drop_page_param():
@@ -96,13 +97,13 @@ def test_filter_choice_links_drop_page_param():
     """
     from django.http import QueryDict
 
-    f, _, _ = _make_filter([{"category": "香蕉"}])
+    f, _, _ = _make_filter([{"category": "banana"}])
 
     class FakeChangeList:
         add_facets = False
 
         def get_query_string(self, new_params=None, remove=None):
-            query = QueryDict("p=9&per_page=25&category=苹果", mutable=True)
+            query = QueryDict("p=9&per_page=25&category=apple", mutable=True)
             for key in remove or []:
                 query.pop(key, None)
             for key, value in (new_params or {}).items():
@@ -114,7 +115,7 @@ def test_filter_choice_links_drop_page_param():
     assert choices
     assert all("p=" not in choice["query_string"] for choice in choices)
     assert any(
-        "category=%E9%A6%99%E8%95%89" in choice["query_string"]
+        "category=banana" in choice["query_string"]
         for choice in choices
     )
 
@@ -127,13 +128,13 @@ def test_filter_all_link_is_not_empty_when_it_clears_last_param():
     """
     from django.http import QueryDict
 
-    f, _, _ = _make_filter([{"category": "香蕉"}], params={"category": "苹果"})
+    f, _, _ = _make_filter([{"category": "banana"}], params={"category": "apple"})
 
     class FakeChangeList:
         add_facets = False
 
         def get_query_string(self, new_params=None, remove=None):
-            query = QueryDict("p=9&category=苹果", mutable=True)
+            query = QueryDict("p=9&category=apple", mutable=True)
             for key in remove or []:
                 query.pop(key, None)
             for key, value in (new_params or {}).items():
@@ -152,8 +153,8 @@ def test_multi_filter_choices_skip_all_and_restore_multiple_selected_values():
     from django.http import QueryDict
 
     f, _, _ = _make_filter(
-        [{"category": "苹果"}, {"category": "香蕉"}, {"category": "梨"}],
-        params={"category": ["苹果,香蕉"]},
+        [{"category": "apple"}, {"category": "banana"}, {"category": "pear"}],
+        params={"category": ["apple,banana"]},
         filter_class=APIMultiSelectFilter,
     )
 
@@ -161,7 +162,7 @@ def test_multi_filter_choices_skip_all_and_restore_multiple_selected_values():
         add_facets = False
 
         def get_query_string(self, new_params=None, remove=None):
-            query = QueryDict("p=9&category=苹果,香蕉", mutable=True)
+            query = QueryDict("p=9&category=apple,banana", mutable=True)
             for key in remove or []:
                 query.pop(key, None)
             for key, value in (new_params or {}).items():
@@ -170,27 +171,27 @@ def test_multi_filter_choices_skip_all_and_restore_multiple_selected_values():
 
     choices = list(f.choices(FakeChangeList()))
 
-    assert [choice["display"] for choice in choices] == ["苹果", "香蕉", "梨"]
-    assert [choice["value"] for choice in choices] == ["苹果", "香蕉", "梨"]
+    assert [choice["display"] for choice in choices] == ["apple", "banana", "pear"]
+    assert [choice["value"] for choice in choices] == ["apple", "banana", "pear"]
     assert {
         choice["value"]
         for choice in choices
         if choice["selected"]
-    } == {"苹果", "香蕉"}
+    } == {"apple", "banana"}
 
 
 def test_multi_filter_trigger_collapses_selected_values():
     """ElementUI-style trigger shows first tags plus +N overflow."""
     f, _, _ = _make_filter(
-        [{"category": "苹果"}],
-        params={"category": ["苹果,香蕉,梨,桃子,葡萄,西瓜,芒果,橙子"]},
+        [{"category": "apple"}],
+        params={"category": ["apple,banana,pear,peach,grape,melon,mango,orange"]},
         filter_class=APIMultiSelectFilter,
     )
 
     assert f.selected_values == [
-        "苹果", "香蕉", "梨", "桃子", "葡萄", "西瓜", "芒果", "橙子",
+        "apple", "banana", "pear", "peach", "grape", "melon", "mango", "orange",
     ]
-    assert f.selected_preview_values == ["苹果", "香蕉"]
+    assert f.selected_preview_values == ["apple", "banana"]
     assert f.selected_overflow_count == 6
 
 
@@ -226,7 +227,7 @@ def test_apiadmin_auto_generated_filters_support_exclude_list():
 
 def test_filter_empty_value_display():
     """The filter uses the admin's get_empty_value_display()."""
-    f, _, _ = _make_filter([{"category": "苹果"}])
+    f, _, _ = _make_filter([{"category": "apple"}])
     assert f.empty_value_display == "-"
 
 

@@ -40,8 +40,8 @@ class Post(APIModel):
         return None
 
     class Meta(APIModel.Meta):
-        verbose_name = "博客文章 (JSONPlaceholder)"
-        verbose_name_plural = "博客文章 (JSONPlaceholder)"
+        verbose_name = "Blog post (JSONPlaceholder)"
+        verbose_name_plural = "Blog posts (JSONPlaceholder)"
 
 
 class User(APIModel):
@@ -56,8 +56,8 @@ class User(APIModel):
         return None
 
     class Meta(APIModel.Meta):
-        verbose_name = "用户 (JSONPlaceholder)"
-        verbose_name_plural = "用户 (JSONPlaceholder)"
+        verbose_name = "User (JSONPlaceholder)"
+        verbose_name_plural = "Users (JSONPlaceholder)"
 
 
 class BigPost(APIModel):
@@ -91,8 +91,8 @@ class BigPost(APIModel):
         return None
 
     class Meta(APIModel.Meta):
-        verbose_name = "大数据 Post (M2 spike)"
-        verbose_name_plural = "大数据 Post (M2 spike)"
+        verbose_name = "Big data post (M2 spike)"
+        verbose_name_plural = "Big data posts (M2 spike)"
 
 
 # --- Jun 2026: 4 envelope-shape demo models ------------------------------

@@ -97,7 +97,10 @@ class ExportMixin:
     def get_export_data(self, queryset):
         """Return a list of dicts (one per row) for the export."""
         fields = self.get_export_fields() or []
-        return [{field: getattr(obj, field, "") for field in fields} for obj in queryset]
+        return [
+            {field: getattr(obj, field, "") for field in fields}
+            for obj in queryset
+        ]
 
     def export_to_excel(self, request, queryset):
         """Build an .xlsx response from `queryset` using openpyxl."""
@@ -336,7 +339,12 @@ class ActionFormMixin:
                 # ... do work
             add_remarks.layer = {
                 "params": [
-                    {"type": "input", "key": "remarks", "label": "备注", "require": False},
+                    {
+                        "type": "input",
+                        "key": "remarks",
+                        "label": "Remarks",
+                        "require": False,
+                    },
                 ]
             }
 
@@ -396,7 +404,11 @@ class ActionFormMixin:
         func, _action, description = resolved
         layer = getattr(func, "layer", None) or {}
         params = layer.get("params", []) if isinstance(layer, dict) else []
-        title = layer.get("title", description) if isinstance(layer, dict) else description
+        title = (
+            layer.get("title", description)
+            if isinstance(layer, dict)
+            else description
+        )
         # simpleui-style layer extras (T1.5 simpleui compatibility):
         # - width: any CSS value (e.g. "40%", "500px") for the modal width
         # - icon, type, style: cosmetic on the action button itself
@@ -468,4 +480,3 @@ class ActionFormMixin:
         if isinstance(result, dict):
             return JsonResponse(result)
         return JsonResponse({"status": "success", "msg": str(result)})
-

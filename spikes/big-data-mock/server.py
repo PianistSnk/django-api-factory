@@ -1,4 +1,4 @@
-"""M2 大数据集 spike — Mock REST server.
+"""M2 large-dataset spike — Mock REST server.
 
 Mimics JSONPlaceholder shape (id / userId / title / body) so the same
 APIAdmin code path works. Supports `?_page=N&_limit=M` pagination.
@@ -62,9 +62,11 @@ TITLE_TEMPLATES = [
 ]
 
 BODY_TEMPLATES = [
-    "quia et suscipit suscipit recusandae consequuntur expedita et cum reprehenderit molestiae",
+    "quia et suscipit suscipit recusandae consequuntur expedita "
+    "et cum reprehenderit molestiae",
     "est rerum tempore vitae sequi sint nihil reprehenderit dolor quia",
-    "et iusto sed quo iure voluptatem occaecati omnis eligendi aut ad voluptatem doloribus",
+    "et iusto sed quo iure voluptatem occaecati omnis eligendi "
+    "aut ad voluptatem doloribus",
     "sint et ea voluptas illo aperiam quaerat fuga voluptas reprehenderit amet",
     "in voluptate sit ea ut autem non aut corporis",
     "qui ratione porro omnis quia minus",
@@ -170,16 +172,18 @@ def build_customer_dataset(n_customers: int) -> list:
         churn_probability = round(((i * 37) % 1000) / 1000, 3)
         credit_score = 300 + ((i * 17) % 550)
         is_active = status in {"active", "trial", "paused"}
-        tags = "、".join([
+        tags = "\u3001".join([
             SEGMENTS[i % len(SEGMENTS)],
             plan,
             "renewal" if i % 3 else "expansion",
         ])
+        first_name = FIRST_NAMES[i % len(FIRST_NAMES)]
+        last_name = LAST_NAMES[(i * 3) % len(LAST_NAMES)]
         customers.append({
             "id": i,
             "customerNo": f"CUST-{i:06d}",
             "accountId": ((i - 1) // 5) + 1,
-            "customerName": f"{FIRST_NAMES[i % len(FIRST_NAMES)]} {LAST_NAMES[(i * 3) % len(LAST_NAMES)]}",
+            "customerName": f"{first_name} {last_name}",
             "email": f"customer{i}@example-{i % 250}.com",
             "phone": f"+1-555-{i % 1000:03d}-{i % 10000:04d}",
             "company": f"{INDUSTRIES[i % len(INDUSTRIES)]} Labs {((i - 1) // 20) + 1}",
@@ -550,8 +554,11 @@ def main():
     DATA["customers"] = build_customer_dataset(args.rows)
     dt = time.perf_counter() - t0
 
-    print(f"Built {args.rows:,} posts + {args.rows:,} customers in {dt:.2f}s "
-          f"({(len(DATA['posts']) * 200 + len(DATA['customers']) * 900) // 1024} KB est.)")
+    est_kb = (len(DATA["posts"]) * 200 + len(DATA["customers"]) * 900) // 1024
+    print(
+        f"Built {args.rows:,} posts + {args.rows:,} customers in {dt:.2f}s "
+        f"({est_kb} KB est.)"
+    )
 
     server = ThreadingHTTPServer((args.host, args.port), MockHandler)
     print(f"Mock server listening on http://{args.host}:{args.port}")

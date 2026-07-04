@@ -202,7 +202,7 @@ def test_get_api_data_flattens_querydict_list_values():
     )
 
 
-# --- get_object detail-view fallback (F1.1: ?p=越界 detail) ---------------
+# --- get_object detail-view fallback (F1.1: out-of-range ?p detail) -------
 
 def test_get_object_uses_id_to_page_direct_lookup():
     """get_object should compute the page directly from the id
@@ -523,7 +523,7 @@ def test_get_api_data_reads_x_total_count_from_response():
     # Default cache_backend is NullCacheBackend (returns None on get),
     # so cache is effectively disabled. Just make sure the changelist
     # and detail cache are also off (they're False by default).
-    admin.multi_value_separator = "、"
+    admin.multi_value_separator = "\u3001"
     admin.request_timeout = 5
     # If the test framework set cache_backend_class to Redis, force
     # the null backend so we don't hit Redis during this unit test.
@@ -552,7 +552,7 @@ def test_get_api_data_reuses_api_result_within_same_request():
     admin.list_per_page = 10
     admin.expected_total = None
     admin.json_to_filter = None
-    admin.multi_value_separator = "、"
+    admin.multi_value_separator = "\u3001"
     admin.request_timeout = 5
     admin.cache_backend_class = None  # type: ignore[assignment]
 
@@ -606,7 +606,7 @@ def test_get_api_data_reads_total_from_response_body():
     admin.list_per_page = 10
     admin.expected_total = None
     admin.json_to_filter = None
-    admin.multi_value_separator = "、"
+    admin.multi_value_separator = "\u3001"
     admin.request_timeout = 5
     admin.cache_backend_class = None  # type: ignore[assignment]
 
@@ -640,7 +640,7 @@ def test_get_api_data_clears_stale_x_total_count_without_header():
     admin.list_per_page = 10
     admin.expected_total = None
     admin.json_to_filter = None
-    admin.multi_value_separator = "、"
+    admin.multi_value_separator = "\u3001"
     admin.request_timeout = 5
     admin.cache_backend_class = None  # type: ignore[assignment]
     admin._api_filtered_total = 999

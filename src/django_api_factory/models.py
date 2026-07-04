@@ -33,16 +33,31 @@ class APIModel(models.Model):
         the auto-generated permission set.
     """
 
+    #: API response fields hidden from generated admin columns.
     black_fields = ["id"]  # type: list[str]
+
+    #: Fixed URL for simple read-only APIs.
     url = None
+
+    #: Alias for `url`; use it when `url` would conflict in project style.
     api_url = None
+
+    #: Preferred top-level keys that may contain response rows.
     response_list_keys = ("data", "items", "results", "rows", "records")
+
+    #: If True, nested dicts in each response row become flat field names.
     flatten_response_rows = True
+
+    #: Separator inserted between nested field names; empty means camelCase.
     nested_field_separator = ""
-    list_value_separator = "、"
+
+    #: Separator used when a list of primitive values is rendered as text.
+    list_value_separator = "\u3001"
+
+    #: Synthetic date field kept for compatibility with Django admin search.
     input_date = models.CharField(
         max_length=255,
-        verbose_name="日期 yyyymmdd",
+        verbose_name="Date yyyymmdd",
         blank=True,
         default="",
     )
@@ -115,6 +130,7 @@ class APIModel(models.Model):
 
     @classmethod
     def _extract_response_rows(cls, response_data) -> list:
+        """Return the row list from a supported response envelope."""
         if isinstance(response_data, list):
             return response_data
         if isinstance(response_data, dict):
@@ -131,17 +147,19 @@ class APIModel(models.Model):
             if len(list_keys) == 1:
                 return response_data[list_keys[0]]
         raise ValueError(
-            f"{cls.__name__}.parse_response() 收到无法识别的响应格式。"
-            f"支持: 顶层 list / {{data: [...]}} / {{items: [...]}} / "
+            f"{cls.__name__}.parse_response() received an unsupported "
+            f"response shape. Supported shapes: top-level list / "
+            f"{{data: [...]}} / {{items: [...]}} / "
             f"{{results: [...]}} / {{rows: [...]}} / {{records: [...]}} / "
-            f"单个顶层 list 字段。"
-            f"收到: {type(response_data).__name__} (前 200 字符: "
-            f"{str(response_data)[:200]!r})。"
-            f"如果是更深层 envelope, override APIModel.parse_response 自己处理。"
+            f"a single top-level list field. Received: "
+            f"{type(response_data).__name__} (first 200 chars: "
+            f"{str(response_data)[:200]!r}). Override "
+            f"APIModel.parse_response for deeper custom envelopes."
         )
 
     @classmethod
     def flatten_response_row(cls, row):
+        """Flatten one API row into admin-friendly scalar fields."""
         if not isinstance(row, dict):
             return row
 
@@ -181,6 +199,7 @@ class APIModel(models.Model):
 
     @classmethod
     def _join_nested_field(cls, prefix, key):
+        """Build a field name for a nested response key."""
         key = str(key)
         if not prefix:
             return key
@@ -191,13 +210,15 @@ class APIModel(models.Model):
 
     @classmethod
     def _normalize_response_value(cls, value):
+        """Convert list values to deterministic text for display/filtering."""
         if isinstance(value, list):
             if all(not isinstance(item, (dict, list)) for item in value):
-                return getattr(cls, "list_value_separator", "、").join(
+                return getattr(cls, "list_value_separator", "\u3001").join(
                     str(item) for item in value
                 )
             return json.dumps(value, ensure_ascii=False, default=str)
         return value
 
     def __str__(self):
+        """Return the API row identifier as the admin object label."""
         return str(self.id)

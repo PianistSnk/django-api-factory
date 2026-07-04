@@ -46,9 +46,21 @@ def admin_with_action():
 
         add_remarks.layer = {
             "params": [
-                {"type": "input", "key": "remarks", "label": "备注", "require": False},
-                {"type": "radio", "key": "status", "label": "状态",
-                 "options": [{"key": "yes", "label": "是"}, {"key": "no", "label": "否"}]},
+                {
+                    "type": "input",
+                    "key": "remarks",
+                    "label": "Remarks",
+                    "require": False,
+                },
+                {
+                    "type": "radio",
+                    "key": "status",
+                    "label": "Status",
+                    "options": [
+                        {"key": "yes", "label": "Yes"},
+                        {"key": "no", "label": "No"},
+                    ],
+                },
             ]
         }
 
@@ -185,10 +197,15 @@ def test_action_form_view_simpleui_style_with_width():
         supplement_remarks.type = "info"
         supplement_remarks.style = "color:white"
         supplement_remarks.layer = {
-            "title": "添加/更新备注",
+            "title": "Add/update remarks",
             "width": "40%",
             "params": [
-                {"type": "input", "key": "remarks", "label": "添加/更新备注", "require": True}
+                {
+                    "type": "input",
+                    "key": "remarks",
+                    "label": "Add/update remarks",
+                    "require": True,
+                }
             ],
         }
 
@@ -197,7 +214,7 @@ def test_action_form_view_simpleui_style_with_width():
     request = factory.get("/admin/tests/widget/action-form/supplement_remarks/")
     response = admin.action_form_view(request, "supplement_remarks")
     data = json.loads(response.content)
-    assert data["title"] == "添加/更新备注"
+    assert data["title"] == "Add/update remarks"
     assert data["width"] == "40%"
     assert data["params"][0]["key"] == "remarks"
     assert data["params"][0]["require"] is True

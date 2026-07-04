@@ -15,10 +15,10 @@
      changelist-form (a POST form) and nested forms are invalid HTML —
      the browser would submit the OUTER form when the user clicks any
      button inside the inner form, losing `per_page` from the URL.
-     Instead, we use pure JS to navigate: onchange + a visible "应用"
+     Instead, we use pure JS to navigate: onchange + a visible "Apply"
      button both call `applyPerPage()`.{% endcomment %}
   <p class="paginator per-page-selector">
-    <label for="per-page-select" style="font-weight:normal; margin-right:6px;">每页显示</label>
+    <label for="per-page-select" style="font-weight:normal; margin-right:6px;">Rows per page</label>
     <select id="per-page-select" name="per_page"
             onchange="applyPerPage();"
             style="display:inline-block; width:auto; margin:0 6px; padding:2px 6px; height:auto;">
@@ -26,7 +26,7 @@
         <option value="{{ n }}"{% if cl.effective_per_page == n %} selected{% endif %}>{{ n }}</option>
       {% endfor %}
     </select>
-    <span style="color:#666;">条</span>
+    <span style="color:#666;">rows</span>
   </p>
   <script>
     // Pure-JS navigation. We can't use a <form> here because we're
@@ -38,7 +38,7 @@
       var u = new URL(window.location.href);
       u.searchParams.set('per_page', select.value);
       // Cut to page 1 when per_page changes (matches the documented
-      // behavior: "切 per_page 时回第 1 页").
+      // behavior: reset to page 1 when per_page changes.
       u.searchParams.delete('p');
       window.location.href = u.toString();
     }
@@ -96,7 +96,7 @@
   {{ block.super }}
   <script>
   // Multi-select commit (modeled after simpleui's batch-apply
-  // filter bar: pick many → click 确定 → navigate with the
+  // filter bar: pick many, click Apply, then navigate with the
   // comma-list URL `?field=v1,v2,v3`). The in-memory filter in
   // APIAdmin.get_api_data already handles that URL via
   // `search_pars[field_name].split(',')` (OR semantics) — no
@@ -249,8 +249,8 @@
       var loadMoreBtn = popup.querySelector('.filter-inline-load-more');
       var statusSpan = popup.querySelector('.filter-inline-status');
       if (btn) btn.setAttribute('data-loading', 'true');
-      if (loadMoreBtn) { loadMoreBtn.setAttribute('data-loading', 'true'); loadMoreBtn.textContent = '加载中…'; }
-      if (statusSpan) { statusSpan.style.display = ''; statusSpan.textContent = '搜索中…'; }
+      if (loadMoreBtn) { loadMoreBtn.setAttribute('data-loading', 'true'); loadMoreBtn.textContent = 'Loading...'; }
+      if (statusSpan) { statusSpan.style.display = ''; statusSpan.textContent = 'Searching...'; }
       var url = new URL(window.location.href);
       url.searchParams.set('ajax_distinct', '1');
       url.searchParams.set('field', fieldName);
@@ -313,7 +313,7 @@
           if (loadMoreBtn) {
             if (data.truncated) {
               loadMoreBtn.style.display = '';
-              loadMoreBtn.textContent = '加载更多…';
+              loadMoreBtn.textContent = 'Load more...';
               loadMoreBtn.setAttribute('data-loading', 'false');
             } else {
               loadMoreBtn.style.display = 'none';
@@ -321,15 +321,15 @@
           }
           if (statusSpan) {
             if (q) {
-              statusSpan.textContent = '匹配 ' + (data.count || 0) + ' 个 (已显 ' + newOffset + ')';
+              statusSpan.textContent = (data.count || 0) + ' matches (' + newOffset + ' shown)';
             } else {
-              statusSpan.textContent = '共 ' + (data.count || 0) + ' 个';
+              statusSpan.textContent = (data.count || 0) + ' total';
             }
           }
         })
         .catch(function (err) {
-          if (statusSpan) statusSpan.textContent = '加载失败: ' + err;
-          if (loadMoreBtn) { loadMoreBtn.textContent = '加载失败, 重试'; loadMoreBtn.setAttribute('data-loading', 'false'); }
+          if (statusSpan) statusSpan.textContent = 'Load failed: ' + err;
+          if (loadMoreBtn) { loadMoreBtn.textContent = 'Load failed, retry'; loadMoreBtn.setAttribute('data-loading', 'false'); }
         });
     }
 
@@ -352,9 +352,9 @@
         var status = ul.parentElement.querySelector('.filter-inline-status');
         if (total > shown) {
           if (btn) btn.style.display = '';
-          if (status) { status.style.display = ''; status.textContent = '共 ' + total + ' 个'; }
+          if (status) { status.style.display = ''; status.textContent = total + ' total'; }
         } else if (total > 0) {
-          if (status) { status.style.display = ''; status.textContent = '共 ' + total + ' 个'; }
+          if (status) { status.style.display = ''; status.textContent = total + ' total'; }
         }
       });
     });
