@@ -57,6 +57,56 @@ class BigPostAdmin(APIAdmin):
     # to find values outside the top 200).
     filter_distinct_limit = 200
 
+    def get_filter_choices(self, field_name, request, q="", offset=0, limit=200):
+        """Fetch distinct values from the mock server.
+
+        BigPost has 100k rows, so the generic fallback intentionally refuses
+        to scan every page. The mock server exposes `/distinct`, which gives
+        the filter UI true cross-page options plus search/load-more.
+        """
+        admin_limit = getattr(self, "filter_distinct_limit", 0) or limit
+        effective_limit = min(limit, admin_limit)
+
+        import hashlib
+        import json
+        import requests
+
+        qh = hashlib.md5(
+            f"{field_name}|{q}|{effective_limit}|{offset}".encode("utf-8")
+        ).hexdigest()[:12]
+        cache_key = f"distinct:local-mock:{self.model._meta.label_lower}:{qh}"
+        if self.filter_distinct_cache_ttl and self.cache_backend is not None:
+            try:
+                cached = self.cache_backend.get(cache_key)
+                if cached:
+                    return json.loads(cached.decode("utf-8"))
+            except Exception:
+                pass
+
+        base = self.model.urls(page=1, page_size=1).split("/posts")[0]
+        url = f"{base}/distinct?field={field_name}&limit={effective_limit}&offset={offset}"
+        if q:
+            from urllib.parse import quote
+            url += f"&q={quote(str(q), safe='')}"
+        try:
+            response = requests.get(url, timeout=self.request_timeout)
+            if response.status_code != 200:
+                return None
+            payload = response.json()
+        except Exception:
+            return None
+
+        if self.filter_distinct_cache_ttl and self.cache_backend is not None:
+            try:
+                self.cache_backend.set(
+                    cache_key,
+                    json.dumps(payload).encode("utf-8"),
+                    self.filter_distinct_cache_ttl,
+                )
+            except Exception:
+                pass
+        return payload
+
 
 class _EnvelopeShapeAdmin(APIAdmin):
     """Shared base for the 4 envelope demo admins — proves that

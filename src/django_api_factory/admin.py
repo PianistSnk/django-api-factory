@@ -719,9 +719,16 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
                 number = self.validate_number(number)
                 if self._request is not None and self._admin is not None:
                     # T2.1 MVP: ask the API for just this page rather
-                    # than slicing the cache. The new request already
-                    # has the right `?p=N` from the URL.
-                    new_qs, _new_fields = self._admin.get_api_data(self._request)
+                    # than slicing the cache. Clone the request and force
+                    # `?p=number` because ChangeList may clamp an out-of-range
+                    # page after filters shrink the result set.
+                    from copy import copy
+                    from django.contrib.admin.views.main import PAGE_VAR
+
+                    page_request = copy(self._request)
+                    page_request.GET = self._request.GET.copy()
+                    page_request.GET[PAGE_VAR] = str(number)
+                    new_qs, _new_fields = self._admin.get_api_data(page_request)
                     items = list(new_qs)
                     return self._get_page(items, number, self)
                 # Fallback (no request, e.g. direct test): slice whatever

@@ -88,6 +88,63 @@ def test_filter_reads_lookup_val_from_params():
     assert f.lookup_val == "苹果"
 
 
+def test_filter_choice_links_drop_page_param():
+    """Changing a filter must reset pagination.
+
+    Keeping `?p=N` makes server-side pagination ask the API for page N of
+    the filtered dataset, which is often empty when the filter result is
+    only one page.
+    """
+    from django.http import QueryDict
+
+    f, _, _ = _make_filter([{"category": "香蕉"}])
+
+    class FakeChangeList:
+        add_facets = False
+
+        def get_query_string(self, new_params=None, remove=None):
+            query = QueryDict("p=9&per_page=25&category=苹果", mutable=True)
+            for key in remove or []:
+                query.pop(key, None)
+            for key, value in (new_params or {}).items():
+                query[key] = value
+            return "?" + query.urlencode()
+
+    choices = list(f.choices(FakeChangeList()))
+
+    assert choices
+    assert all("p=" not in choice["query_string"] for choice in choices)
+    assert any("category=%E9%A6%99%E8%95%89" in choice["query_string"] for choice in choices)
+
+
+def test_filter_all_link_is_not_empty_when_it_clears_last_param():
+    """`href=""` keeps the browser on the current filtered URL.
+
+    When "All" removes the last query param, render `?` so the browser
+    navigates to the same path with an empty query string.
+    """
+    from django.http import QueryDict
+
+    f, _, _ = _make_filter([{"category": "香蕉"}], params={"category": "苹果"})
+
+    class FakeChangeList:
+        add_facets = False
+
+        def get_query_string(self, new_params=None, remove=None):
+            query = QueryDict("p=9&category=苹果", mutable=True)
+            for key in remove or []:
+                query.pop(key, None)
+            for key, value in (new_params or {}).items():
+                query[key] = value
+            encoded = query.urlencode()
+            return f"?{encoded}" if encoded else ""
+
+    all_choice = list(f.choices(FakeChangeList()))[0]
+
+    assert all_choice["display"] == "All"
+    assert all_choice["query_string"] == "?"
+
+
 def test_filter_empty_value_display():
     """The filter uses the admin's get_empty_value_display()."""
     f, _, _ = _make_filter([{"category": "苹果"}])

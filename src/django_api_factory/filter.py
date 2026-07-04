@@ -1,4 +1,8 @@
+from urllib.parse import urlsplit, urlunsplit
+
 from django.contrib.admin import AllValuesFieldListFilter
+from django.contrib.admin.views.main import PAGE_VAR
+from django.http import QueryDict
 
 
 class APIFilter(AllValuesFieldListFilter):
@@ -110,7 +114,32 @@ class APIFilter(AllValuesFieldListFilter):
 
     def choices(self, changelist):
         for choice in super().choices(changelist):
+            query_string = choice.get("query_string")
+            if query_string:
+                choice = choice.copy()
+                choice["query_string"] = self._drop_page_param(query_string)
             yield choice
+
+    def _drop_page_param(self, query_string):
+        """Filter changes must start from page 1.
+
+        Django's stock filter links keep the current `?p=N`. With
+        server-side pagination, applying a filter while on page 20 asks
+        the API for the filtered dataset's page 20, which is often empty.
+        """
+        parts = urlsplit(query_string)
+        query = QueryDict(parts.query, mutable=True)
+        query.pop(PAGE_VAR, None)
+        encoded_query = query.urlencode()
+        if not encoded_query and not parts.path:
+            return "?"
+        return urlunsplit((
+            parts.scheme,
+            parts.netloc,
+            parts.path,
+            encoded_query,
+            parts.fragment,
+        ))
 
 
 class APIMultiSelectFilter(APIFilter):

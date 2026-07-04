@@ -303,6 +303,38 @@ def test_apipaginator_page_calls_get_api_data_for_that_page():
     assert list(page_3.object_list) == [f"row-3-{i}" for i in range(10)]
 
 
+def test_apipaginator_page_overrides_stale_request_page():
+    """If filters shrink the result set, ChangeList clamps page_num.
+
+    The paginator must fetch the clamped page number, not the stale `?p=N`
+    still present on the original request.
+    """
+    admin = APIAdmin.__new__(APIAdmin)
+    admin.model = PagedPost
+    admin.list_per_page = 50
+    admin.expected_total = 1
+
+    page_requests = []
+
+    def fake_get_api_data(request):
+        p = int(request.GET.get("p", "1") or "1")
+        page_requests.append(p)
+        qs = MyQuerySet(model=PagedPost)
+        qs._result_cache = [f"row-{p}"]
+        return qs, ["id"]
+
+    admin.get_api_data = fake_get_api_data
+    qs_initial = MyQuerySet(model=PagedPost)
+    qs_initial._result_cache = []
+
+    req = RequestFactory().get("/admin/tests/pagedpost/?p=9&userId=7")
+    paginator = admin.get_paginator(req, qs_initial, 50)
+    page_1 = paginator.page(1)
+
+    assert page_requests == [1]
+    assert list(page_1.object_list) == ["row-1"]
+
+
 def test_apipaginator_page1_first_load_no_extra_get_api_data_call():
     """When the ChangeList first constructs the paginator and calls
     page(1), the API has ALREADY been called once (by get_queryset
