@@ -1,20 +1,22 @@
+import json
+
 from django.db import models
-from abc import abstractmethod
 
 
 class APIModel(models.Model):
     """
     Abstract base for models that source their data from a REST API.
 
-    Subclasses must implement:
-    - urls(**kwargs) -> str: full URL (with query parameters if needed)
-    - cache(**kwargs) -> str | None: Redis cache key, or None to disable
+    Subclasses normally only need:
+    - url / api_url: full URL for simple APIs; OR override urls(**kwargs)
+      when the API needs custom pagination/filter query construction
 
     Subclasses may override:
+    - cache(**kwargs) -> str | None: Redis cache key. Default disables cache.
     - black_fields: list of field names to hide from the admin
     - parse_response(response_data) -> list[dict]: convert raw API response
-      body into a list of row dicts. Default handles 4 industry-standard
-      envelope shapes; override for anything exotic.
+      body into a list of row dicts. Default handles common envelope shapes,
+      can infer a single list-valued top-level key, and flattens nested dicts.
 
     Permissions:
         APIModel subclasses are admin-only data viewers — the data lives
@@ -32,6 +34,12 @@ class APIModel(models.Model):
     """
 
     black_fields = ["id"]  # type: list[str]
+    url = None
+    api_url = None
+    response_list_keys = ("data", "items", "results", "rows", "records")
+    flatten_response_rows = True
+    nested_field_separator = ""
+    list_value_separator = "、"
     input_date = models.CharField(
         max_length=255,
         verbose_name="日期 yyyymmdd",
@@ -44,40 +52,48 @@ class APIModel(models.Model):
         managed = False
 
     @classmethod
-    @abstractmethod
     def urls(cls, **kwargs) -> str:
-        """Return the full API URL to fetch data from."""
-        raise NotImplementedError
+        """Return the full API URL to fetch data from.
+
+        For simple APIs, set `url = "https://..."` on the subclass. Override
+        this method only when page/page_size/filter kwargs must be translated
+        into the API's own query parameter format.
+        """
+        url = getattr(cls, "api_url", None) or getattr(cls, "url", None)
+        if url:
+            return url
+        raise NotImplementedError(
+            f"{cls.__name__} must define `url`/`api_url` or override urls()."
+        )
 
     @classmethod
-    @abstractmethod
     def cache(cls, **kwargs):
         """Return the Redis cache key, or None to disable caching."""
-        raise NotImplementedError
+        return None
 
     @classmethod
     def parse_response(cls, response_data) -> list:
         """Convert a raw API response body to a list of row dicts.
 
-        We support 4 industry-standard response shapes, in this priority
+        We support common response shapes, in this priority
         order (first match wins):
 
         1. Bare list:              ``[{...}, {...}]``            (REST canonical)
         2. ``{"data": [...]}``     (common in custom Laravel / internal APIs)
         3. ``{"items": [...]}``    (older JSONPlaceholder / internal APIs)
-        4. ``{"results": [...]}``  (Django REST Framework ``PageNumberPagination`` default)
+        4. ``{"results": [...]}``  (Django REST Framework pagination default)
+        5. ``{"rows": [...]}`` / ``{"records": [...]}``
+        6. Any response with exactly one top-level list value, e.g.
+           ``{"users": [...], "total": 208}``
 
-        Why these 4 and not more: they cover the formats used by jsonplaceholder,
-        GitHub, Stripe, Google Cloud, and the DRF ecosystem. We deliberately
-        do NOT invent a 5th canonical key (e.g. ``payload``, ``rows``, ``list``)
-        — if your API uses something exotic, override this method on your
-        ``APIModel`` subclass.
+        Nested dict rows are flattened by default, so
+        ``{"company": {"name": "Acme"}}`` becomes ``{"companyName": "Acme"}``.
 
         Recommended: write REST-compliant APIs that return a bare list. This
         is the path taken by jsonplaceholder, GitHub, Stripe, and Google Cloud
         — and it removes the need for any unwrapping logic on the client side.
 
-        Override example::
+        Override example for truly custom shapes::
 
             class MyModel(APIModel):
                 @classmethod
@@ -86,22 +102,102 @@ class APIModel(models.Model):
                         return data
                     return data.get("payload", {}).get("rows", [])
         """
+        rows = cls._extract_response_rows(response_data)
+        if not getattr(cls, "flatten_response_rows", True):
+            return rows
+        flattened_rows = []
+        changed = False
+        for row in rows:
+            flattened = cls.flatten_response_row(row)
+            flattened_rows.append(flattened)
+            changed = changed or flattened is not row
+        return flattened_rows if changed else rows
+
+    @classmethod
+    def _extract_response_rows(cls, response_data) -> list:
         if isinstance(response_data, list):
             return response_data
         if isinstance(response_data, dict):
-            for key in ("data", "items", "results"):
+            for key in cls.response_list_keys:
                 value = response_data.get(key)
-                if isinstance(value, list):
-                    return value
+                if key in response_data:
+                    if isinstance(value, list):
+                        return value
+                    break
+            list_keys = [
+                key for key, value in response_data.items()
+                if isinstance(value, list)
+            ]
+            if len(list_keys) == 1:
+                return response_data[list_keys[0]]
         raise ValueError(
             f"{cls.__name__}.parse_response() 收到无法识别的响应格式。"
-            f"支持 4 种业界标准格式: 顶层 list / "
-            f"{{data: [...]}} / {{items: [...]}} / {{results: [...]}}。"
+            f"支持: 顶层 list / {{data: [...]}} / {{items: [...]}} / "
+            f"{{results: [...]}} / {{rows: [...]}} / {{records: [...]}} / "
+            f"单个顶层 list 字段。"
             f"收到: {type(response_data).__name__} (前 200 字符: "
             f"{str(response_data)[:200]!r})。"
-            f"如果是 envelope 格式, override APIModel.parse_response 自己处理。"
-            f"参考: {cls.__name__}.urls() 的写法。"
+            f"如果是更深层 envelope, override APIModel.parse_response 自己处理。"
         )
+
+    @classmethod
+    def flatten_response_row(cls, row):
+        if not isinstance(row, dict):
+            return row
+
+        flat = {}
+        changed = False
+
+        def walk(prefix, value):
+            nonlocal changed
+            if isinstance(value, dict):
+                changed = True
+                if not value:
+                    flat[prefix] = {}
+                    return
+                for child_key, child_value in value.items():
+                    walk(cls._join_nested_field(prefix, child_key), child_value)
+                return
+            normalized = cls._normalize_response_value(value)
+            if normalized is not value:
+                changed = True
+            flat[prefix] = normalized
+
+        for key, value in row.items():
+            if isinstance(value, dict):
+                changed = True
+                if not value:
+                    flat[key] = {}
+                    continue
+                for child_key, child_value in value.items():
+                    walk(cls._join_nested_field(key, child_key), child_value)
+            else:
+                normalized = cls._normalize_response_value(value)
+                if normalized is not value:
+                    changed = True
+                flat[key] = normalized
+
+        return flat if changed else row
+
+    @classmethod
+    def _join_nested_field(cls, prefix, key):
+        key = str(key)
+        if not prefix:
+            return key
+        separator = getattr(cls, "nested_field_separator", "")
+        if separator:
+            return f"{prefix}{separator}{key}"
+        return f"{prefix}{key[:1].upper()}{key[1:]}"
+
+    @classmethod
+    def _normalize_response_value(cls, value):
+        if isinstance(value, list):
+            if all(not isinstance(item, (dict, list)) for item in value):
+                return getattr(cls, "list_value_separator", "、").join(
+                    str(item) for item in value
+                )
+            return json.dumps(value, ensure_ascii=False, default=str)
+        return value
 
     def __str__(self):
         return str(self.id)

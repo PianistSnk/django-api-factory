@@ -11,6 +11,7 @@ class APIFilter(AllValuesFieldListFilter):
     is_multi = False
 
     def __init__(self, field, request, params, model, model_admin, field_path):
+        original_params = params.copy()
         try:
             super().__init__(field, request, params, model, model_admin, field_path)
         except Exception:
@@ -24,8 +25,10 @@ class APIFilter(AllValuesFieldListFilter):
             self.empty_value_display = model_admin.get_empty_value_display()
         self.lookup_kwarg = field_path
         self.lookup_kwarg_isnull = "%s__isnull" % field_path
-        self.lookup_val = params.get(self.lookup_kwarg)
-        self.lookup_val_isnull = params.get(self.lookup_kwarg_isnull)
+        self.lookup_val = self._first_lookup_value(original_params.get(self.lookup_kwarg))
+        self.lookup_val_isnull = self._first_lookup_value(
+            original_params.get(self.lookup_kwarg_isnull)
+        )
         if not hasattr(self, "empty_value_display") or self.empty_value_display is None:
             self.empty_value_display = model_admin.get_empty_value_display()
         # Filter choices: prefer the admin's get_filter_choices() (Jun
@@ -43,16 +46,14 @@ class APIFilter(AllValuesFieldListFilter):
         # blocks attributes starting with `_`). The spec's JS reads
         # this via `data-total` on the <ul>.
         self.total_count = total_count
-        # Override the title to include the count badge. The template
-        # previously did this with `{% if choices|length > 10 %}{{choices|length}}{% endif %}`
-        # which didn't know about the TRUE total. Now we set it
-        # explicitly so the user sees the full count when the
-        # dropdown is truncated (e.g. "userId (200 of 10000)").
+        # Override the title to include the TRUE total count only when the
+        # filter is idle. Once values are selected, the trigger shows those
+        # values as ElementUI-style tags, so the count badge becomes noise.
         base_title = field.verbose_name
-        if total_count > len(values) > 0:
-            self.title = f"{base_title} ({len(values)} of {total_count})"
-        elif len(values) > 0:
-            self.title = f"{base_title} ({len(values)})"
+        if self.lookup_val:
+            self.title = base_title
+        elif total_count > 0:
+            self.title = f"{base_title} ({total_count})"
         # else: keep the default (no count)
 
     def _collect_choices(self, field, model_admin, request):
@@ -68,8 +69,8 @@ class APIFilter(AllValuesFieldListFilter):
         the new hook isn't present or raises.
 
         Returns (values_list, total_count) where total_count is the
-        TRUE distinct count (for the `(X of Y)` badge in the
-        template). If the hook doesn't return a total, we use
+        TRUE distinct count for the idle trigger badge. If the hook
+        doesn't return a total, we use
         len(values) (no truncation info)."""
         get_choices = getattr(model_admin, "get_filter_choices", None)
         if callable(get_choices):
@@ -112,6 +113,11 @@ class APIFilter(AllValuesFieldListFilter):
                 out.append(value)
         return out
 
+    def _first_lookup_value(self, value):
+        if isinstance(value, (list, tuple)):
+            return value[0] if value else None
+        return value
+
     def choices(self, changelist):
         for choice in super().choices(changelist):
             query_string = choice.get("query_string")
@@ -152,3 +158,43 @@ class APIMultiSelectFilter(APIFilter):
     is needed on this side.
     """
     is_multi = True
+    trigger_tag_limit = 2
+
+    def __init__(self, field, request, params, model, model_admin, field_path):
+        super().__init__(field, request, params, model, model_admin, field_path)
+        self.selected_values = self._selected_values()
+        self.selected_preview_values = self.selected_values[:self.trigger_tag_limit]
+        self.selected_overflow_count = max(
+            0,
+            len(self.selected_values) - len(self.selected_preview_values),
+        )
+
+    def choices(self, changelist):
+        selected_values = set(self.selected_values)
+        for index, choice in enumerate(super().choices(changelist)):
+            # Multi-select uses the explicit "清空" action instead of an
+            # "All" row. Keeping the "All" row as a checkbox would submit
+            # `?field=All`, which is never a real data value.
+            if index == 0:
+                continue
+            choice = choice.copy()
+            value = self._choice_value(choice)
+            choice["value"] = value
+            choice["selected"] = value in selected_values
+            yield choice
+
+    def _choice_value(self, choice):
+        query_string = choice.get("query_string") or ""
+        parts = urlsplit(query_string)
+        query = QueryDict(parts.query)
+        value = query.get(self.lookup_kwarg)
+        if value is None:
+            value = choice.get("display", "")
+        return str(value)
+
+    def _selected_values(self):
+        return [
+            value
+            for value in str(self.lookup_val or "").split(",")
+            if value
+        ]

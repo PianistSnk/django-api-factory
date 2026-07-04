@@ -1,14 +1,12 @@
 """Models for the local-mock example.
 
-Sourced from the local `spikes/big-data-mock/server.py` (a tiny
-in-memory mock REST server bundled with the repo). Used to demo
-the framework against a **100k row** dataset — the same M2
-performance work that powers the production case where the public
-API is paginated but big.
+Two data sources live here:
+- local `spikes/big-data-mock/server.py` for the **100k row** M2
+  performance and envelope-shape demos;
+- real DummyJSON users for a small wide external API.
 
-This example also includes **4 envelope-shape demo models** so you
-can see the `APIModel.parse_response` hook handle all 4
-industry-standard response shapes with zero per-admin boilerplate.
+Together they exercise server-side pagination, dynamic totals, wide
+schemas, and `APIModel.parse_response` against realistic response shapes.
 
 To start the mock server (separate terminal):
     cd /path/to/django-api-factory
@@ -56,22 +54,30 @@ class BigPost(APIModel):
         verbose_name_plural = "大数据 Post (M2 spike)"
 
 
-# --- 4 envelope-shape demo models (Jun 2026 — APIModel.parse_response)
-# The local mock server exposes the same dataset under 4 different
-# envelope shapes so we can verify APIModel.parse_response handles
-# all 4 with the default impl (no override required). Together they
-# prove "one admin can speak 4 industry response shapes without
-# per-admin boilerplate".
+class DummyJSONUser(APIModel):
+    """Real public API demo backed by DummyJSON users."""
+
+    url = "https://dummyjson.com/users?limit=1000"
+
+    class Meta(APIModel.Meta):
+        verbose_name = "真实 DummyJSON 用户 API (wide)"
+        verbose_name_plural = "真实 DummyJSON 用户 API (wide)"
 
 
 def _mock_url(path: str, page: int, page_size: int, **kwargs) -> str:
-    """Build a URL for the 4 envelope-shape mock endpoints."""
+    """Build a URL for mock endpoints that use page/page_size params."""
     qs = [f"page={page}", f"page_size={page_size}"]
     for k, v in kwargs.items():
         if v in (None, ""):
             continue
         qs.append(f"{k}={quote(str(v), safe='')}")
     return f"http://127.0.0.1:8200/{path}?" + "&".join(qs)
+
+
+# --- Envelope-shape demo models (Jun 2026 — APIModel.parse_response)
+# The local mock server exposes the same dataset under common envelope
+# shapes so we can verify APIModel.parse_response handles wrappers with
+# the default impl (no override required).
 
 
 class PostBare(APIModel):

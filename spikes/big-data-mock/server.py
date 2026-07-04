@@ -20,7 +20,7 @@ random.seed(42)
 
 # Pre-built dataset — built once at startup, served from memory.
 # Tweak ROWS via --rows (1w / 10w / 100w). User count scales with row count.
-DATA = {"posts": []}
+DATA = {"posts": [], "customers": []}
 
 TITLE_TEMPLATES = [
     "sunt aut facere repellat provident",
@@ -86,6 +86,48 @@ BODY_TEMPLATES = [
 ]
 
 
+FIRST_NAMES = [
+    "Ava", "Noah", "Mia", "Liam", "Emma", "Oliver", "Sophia", "Elijah",
+    "Isabella", "Lucas", "Amelia", "Mason", "Harper", "Logan", "Evelyn",
+    "Ethan", "Luna", "James", "Aria", "Benjamin",
+]
+
+LAST_NAMES = [
+    "Chen", "Smith", "Johnson", "Wang", "Brown", "Garcia", "Miller",
+    "Davis", "Wilson", "Taylor", "Anderson", "Thomas", "Moore", "Martin",
+    "Lee", "Clark", "Lewis", "Young", "Hall", "Allen",
+]
+
+CITIES = [
+    "New York", "San Francisco", "Seattle", "Austin", "Chicago", "Boston",
+    "Los Angeles", "Denver", "Atlanta", "Miami", "London", "Paris",
+    "Berlin", "Tokyo", "Singapore", "Sydney", "Toronto", "Dublin",
+    "Amsterdam", "Hong Kong",
+]
+
+COUNTRIES = [
+    "US", "US", "US", "US", "US", "US", "US", "US", "US", "US",
+    "UK", "FR", "DE", "JP", "SG", "AU", "CA", "IE", "NL", "HK",
+]
+
+REGIONS = ["NA", "EMEA", "APAC", "LATAM"]
+INDUSTRIES = [
+    "FinTech", "Healthcare", "Retail", "Manufacturing", "Education",
+    "Gaming", "Energy", "Logistics", "Media", "SaaS",
+]
+SEGMENTS = ["enterprise", "mid-market", "smb", "public-sector", "education"]
+PLANS = ["free", "starter", "growth", "business", "enterprise"]
+STATUSES = ["active", "trial", "paused", "churned", "delinquent"]
+SOURCES = ["web", "partner", "event", "referral", "marketplace", "sales"]
+CHANNELS = ["self-serve", "inside-sales", "field-sales", "reseller"]
+DEPARTMENTS = ["Finance", "Operations", "IT", "Marketing", "Sales", "HR"]
+ROLES = ["Admin", "Buyer", "Analyst", "Manager", "Developer", "Executive"]
+RISK_LEVELS = ["low", "medium", "high", "critical"]
+PRIORITIES = ["P0", "P1", "P2", "P3"]
+SLA_TIERS = ["bronze", "silver", "gold", "platinum"]
+CURRENCIES = ["USD", "EUR", "JPY", "SGD", "AUD", "CAD", "GBP"]
+
+
 def build_dataset(n_posts: int) -> list:
     """Generate n_posts fake posts in JSONPlaceholder shape."""
     n_users = max(10, n_posts // 10)  # 1 user per 10 posts, min 10 users
@@ -101,6 +143,135 @@ def build_dataset(n_posts: int) -> list:
             "body": body,
         })
     return posts
+
+
+def build_customer_dataset(n_customers: int) -> list:
+    """Generate a wide external-API-style customer dataset.
+
+    This intentionally has many fields so the admin can exercise dynamic
+    columns, cross-page filters, server-side sort, and pagination against
+    something closer to an enterprise CRM / customer-360 endpoint.
+    """
+    customers = []
+    for i in range(1, n_customers + 1):
+        city_idx = i % len(CITIES)
+        region = REGIONS[i % len(REGIONS)]
+        plan = PLANS[i % len(PLANS)]
+        status = STATUSES[i % len(STATUSES)]
+        risk_level = RISK_LEVELS[(i * 7) % len(RISK_LEVELS)]
+        currency = CURRENCIES[i % len(CURRENCIES)]
+        signup_month = (i % 12) + 1
+        signup_day = (i % 28) + 1
+        last_login_day = ((i * 3) % 28) + 1
+        updated_hour = i % 24
+        total_orders = (i * 11) % 500
+        total_spend = round(((i * 1379) % 750_000) / 10, 2)
+        lifetime_value = round(total_spend * (1.2 + ((i % 9) / 10)), 2)
+        churn_probability = round(((i * 37) % 1000) / 1000, 3)
+        credit_score = 300 + ((i * 17) % 550)
+        is_active = status in {"active", "trial", "paused"}
+        tags = "、".join([
+            SEGMENTS[i % len(SEGMENTS)],
+            plan,
+            "renewal" if i % 3 else "expansion",
+        ])
+        customers.append({
+            "id": i,
+            "customerNo": f"CUST-{i:06d}",
+            "accountId": ((i - 1) // 5) + 1,
+            "customerName": f"{FIRST_NAMES[i % len(FIRST_NAMES)]} {LAST_NAMES[(i * 3) % len(LAST_NAMES)]}",
+            "email": f"customer{i}@example-{i % 250}.com",
+            "phone": f"+1-555-{i % 1000:03d}-{i % 10000:04d}",
+            "company": f"{INDUSTRIES[i % len(INDUSTRIES)]} Labs {((i - 1) // 20) + 1}",
+            "industry": INDUSTRIES[i % len(INDUSTRIES)],
+            "companySize": 10 + ((i * 29) % 20_000),
+            "country": COUNTRIES[city_idx],
+            "region": region,
+            "city": CITIES[city_idx],
+            "segment": SEGMENTS[i % len(SEGMENTS)],
+            "plan": plan,
+            "status": status,
+            "source": SOURCES[i % len(SOURCES)],
+            "channel": CHANNELS[i % len(CHANNELS)],
+            "ownerId": ((i - 1) % 300) + 1,
+            "priority": PRIORITIES[i % len(PRIORITIES)],
+            "riskLevel": risk_level,
+            "creditScore": credit_score,
+            "totalOrders": total_orders,
+            "totalSpend": total_spend,
+            "lifetimeValue": lifetime_value,
+            "churnProbability": churn_probability,
+            "balance": round(total_spend * (((i % 11) - 5) / 100), 2),
+            "currency": currency,
+            "isActive": is_active,
+            "signupDate": f"2021-{signup_month:02d}-{signup_day:02d}",
+            "lastLogin": f"2026-06-{last_login_day:02d} {updated_hour:02d}:30:00",
+            "updatedAt": f"2026-07-{signup_day:02d}T{updated_hour:02d}:15:00Z",
+            "department": DEPARTMENTS[i % len(DEPARTMENTS)],
+            "role": ROLES[i % len(ROLES)],
+            "slaTier": SLA_TIERS[i % len(SLA_TIERS)],
+            "contractMonths": 1 + ((i * 5) % 60),
+            "renewalMonth": ((i * 2) % 12) + 1,
+            "tags": tags,
+            "notes": f"{status} {plan} customer in {CITIES[city_idx]} #{i}",
+        })
+    return customers
+
+
+def _first_query(qs, name, fallback):
+    value = qs.get(name)
+    return value[0] if value else fallback
+
+
+def _csv_values(qs, name):
+    values = []
+    for raw in qs.get(name, []):
+        values.extend(value for value in raw.split(",") if value != "")
+    return values
+
+
+def _filter_and_sort_rows(rows, qs):
+    if not rows:
+        return rows
+    field_names = set(rows[0])
+    reserved = {
+        "_page", "_limit", "page", "page_size",
+        "_sort", "_order", "sort", "order",
+        "q", "ajax_distinct", "field", "limit", "offset", "resource",
+    }
+    filtered = rows
+    for field_name in field_names:
+        if field_name in reserved:
+            continue
+        filters = set(_csv_values(qs, field_name))
+        if filters:
+            filtered = [
+                row for row in filtered
+                if str(row.get(field_name, "")) in filters
+            ]
+
+    q = _first_query(qs, "q", "").strip().lower()
+    if q:
+        filtered = [
+            row for row in filtered
+            if any(q in str(value).lower() for value in row.values())
+        ]
+
+    sort_field = _first_query(qs, "_sort", _first_query(qs, "sort", None))
+    sort_order = _first_query(qs, "_order", _first_query(qs, "order", "asc")).lower()
+    if sort_field and sort_field in field_names:
+        reverse = sort_order == "desc"
+
+        def _sort_key(row):
+            value = row.get(sort_field)
+            if value is None:
+                return (1, "")
+            if isinstance(value, (int, float)):
+                return (0, value)
+            return (0, str(value).lower())
+
+        filtered = sorted(filtered, key=_sort_key, reverse=reverse)
+    return filtered
 
 
 class MockHandler(BaseHTTPRequestHandler):
@@ -164,6 +335,11 @@ class MockHandler(BaseHTTPRequestHandler):
         if self.path.startswith("/distinct"):
             from urllib.parse import urlparse, parse_qs
             qs = parse_qs(urlparse(self.path).query)
+            resource = (qs.get("resource") or qs.get("dataset") or ["posts"])[0]
+            rows = DATA.get(resource)
+            if rows is None:
+                self.send_error(400, f"Unknown ?resource={resource!r}")
+                return
             field = (qs.get("field") or [None])[0]
             if not field:
                 self.send_error(400, "Missing ?field=<name>")
@@ -178,8 +354,13 @@ class MockHandler(BaseHTTPRequestHandler):
             # initial top-N render (e.g. userId=7777 on 100k rows
             # where the top 200 only show 1-200).
             q = (qs.get("q") or [""])[0].strip().lower()
-            distinct = sorted({p.get(field) for p in DATA["posts"] if field in p},
-                             key=lambda x: (x is None, x))
+            distinct = sorted(
+                {p.get(field) for p in rows if field in p},
+                key=lambda x: (
+                    x is None,
+                    x if isinstance(x, (int, float)) else str(x).lower(),
+                ),
+            )
             if q:
                 distinct = [v for v in distinct if q in str(v).lower()]
             total = len(distinct)
@@ -204,6 +385,31 @@ class MockHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        # /customers is a wide, external-API-style endpoint: 35+ fields,
+        # 100k rows, server-side pagination/filter/sort/search. It exists
+        # specifically to stress-test django-api-factory against a much
+        # wider schema than JSONPlaceholder posts.
+        if self.path.startswith("/customers"):
+            from urllib.parse import urlparse, parse_qs
+            qs = parse_qs(urlparse(self.path).query)
+            page = int(_first_query(qs, "page", _first_query(qs, "_page", "1")))
+            limit = int(_first_query(qs, "page_size", _first_query(qs, "_limit", "10")))
+            filtered = _filter_and_sort_rows(DATA["customers"], qs)
+            total = len(filtered)
+            start = (page - 1) * limit
+            end = start + limit
+            slice_ = filtered[start:end]
+
+            body = json.dumps(slice_).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("X-Total-Count", str(total))
+            self.send_header("Access-Control-Expose-Headers", "X-Total-Count")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if not self.path.startswith("/posts"):
             self.send_error(404, "Not Found")
             return
@@ -218,6 +424,11 @@ class MockHandler(BaseHTTPRequestHandler):
             return v[0] if v else fallback
         def _all(name):
             return qs.get(name, [])
+        def _csv_values(name):
+            values = []
+            for raw in _all(name):
+                values.extend(v for v in raw.split(",") if v != "")
+            return values
         page = int(_first("page", _first("_page", "1")))
         limit = int(_first("page_size", _first("_limit", "10")))
 
@@ -228,30 +439,33 @@ class MockHandler(BaseHTTPRequestHandler):
         # FILTERED size so the admin paginator shows the right page
         # count for the filtered set.
         filtered = DATA["posts"]
-        # userId: exact integer match
-        userId = _first("userId", None)
-        if userId is not None:
+        # userId: exact integer match, OR across comma/repeated values.
+        user_id_filters = []
+        for raw in _csv_values("userId"):
             try:
-                uid = int(userId)
-                filtered = [p for p in filtered if p["userId"] == uid]
-            except ValueError:
-                pass  # ignore non-integer; pass-through
-        # title: exact string match
-        title = _first("title", None)
-        if title is not None:
-            filtered = [p for p in filtered if p["title"] == title]
-        # body: OR-equals across multiple values (multi-select)
-        body_filters = _all("body")
-        if body_filters:
-            filtered = [p for p in filtered if p["body"] in body_filters]
-        # id: exact match (for direct-link / detail page jumping)
-        id_filter = _first("id", None)
-        if id_filter is not None:
-            try:
-                fid = int(id_filter)
-                filtered = [p for p in filtered if p["id"] == fid]
+                user_id_filters.append(int(raw))
             except ValueError:
                 pass
+        if user_id_filters:
+            user_ids = set(user_id_filters)
+            filtered = [p for p in filtered if p["userId"] in user_ids]
+        # title/body: exact string match, OR across comma/repeated values.
+        title_filters = set(_csv_values("title"))
+        if title_filters:
+            filtered = [p for p in filtered if p["title"] in title_filters]
+        body_filters = set(_csv_values("body"))
+        if body_filters:
+            filtered = [p for p in filtered if p["body"] in body_filters]
+        # id: exact match, OR across comma/repeated values.
+        id_filters = []
+        for raw in _csv_values("id"):
+            try:
+                id_filters.append(int(raw))
+            except ValueError:
+                pass
+        if id_filters:
+            ids = set(id_filters)
+            filtered = [p for p in filtered if p["id"] in ids]
 
         # Server-side search (Jun 2026 cross-page q): substring match
         # across title + body (and id/userId as strings for convenience).
@@ -333,15 +547,17 @@ def main():
 
     t0 = time.perf_counter()
     DATA["posts"] = build_dataset(args.rows)
+    DATA["customers"] = build_customer_dataset(args.rows)
     dt = time.perf_counter() - t0
 
-    print(f"Built {args.rows:,} rows in {dt:.2f}s "
-          f"({len(DATA['posts']) * 200 // 1024} KB est.)")
+    print(f"Built {args.rows:,} posts + {args.rows:,} customers in {dt:.2f}s "
+          f"({(len(DATA['posts']) * 200 + len(DATA['customers']) * 900) // 1024} KB est.)")
 
     server = ThreadingHTTPServer((args.host, args.port), MockHandler)
     print(f"Mock server listening on http://{args.host}:{args.port}")
     print(f"  Try: curl 'http://{args.host}:{args.port}/posts?_page=1&_limit=10'")
-    print(f"  4 envelope shapes: /posts-bare /posts-data /posts-items /posts-results")
+    print(f"  Wide external API: curl 'http://{args.host}:{args.port}/customers?page=1&page_size=10'")
+    print("  4 envelope shapes: /posts-bare /posts-data /posts-items /posts-results")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

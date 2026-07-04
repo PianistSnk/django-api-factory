@@ -60,9 +60,11 @@
       flex-wrap: wrap;
       align-items: center;
       gap: 0 6px;
-      padding: 8px 12px;
-      background: #f9f9f9;
-      border-bottom: 1px solid #ddd;
+      padding: 10px 12px 2px;
+      background: #fff;
+      border: 1px solid #ebeef5;
+      border-radius: 4px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.04);
       margin-bottom: 12px;
     }
     /* Hide the right-side filter nav (we moved filters to the top). */
@@ -109,6 +111,61 @@
       u.searchParams.delete('p');
       return u.toString();
     }
+    function splitValues(raw) {
+      if (!raw) return [];
+      return raw.split(',').filter(function (v) { return v !== ''; });
+    }
+    function getSelection(pill) {
+      if (!pill.__filterSelection) {
+        var field = pill.getAttribute('data-filter-field');
+        var selected = new Set(splitValues(new URL(window.location.href).searchParams.get(field)));
+        pill.querySelectorAll('.filter-inline-check:checked').forEach(function (check) {
+          selected.add(check.getAttribute('data-value'));
+        });
+        pill.__filterSelection = selected;
+      }
+      return pill.__filterSelection;
+    }
+    function syncRenderedChecks(pill) {
+      var selected = getSelection(pill);
+      pill.querySelectorAll('.filter-inline-check').forEach(function (check) {
+        var isChecked = selected.has(check.getAttribute('data-value'));
+        check.checked = isChecked;
+        var li = check.closest('li');
+        if (li) li.classList.toggle('selected', isChecked);
+      });
+      renderTriggerTags(pill);
+    }
+    function renderTriggerTags(pill) {
+      var tags = pill.querySelector('.filter-trigger-tags');
+      if (!tags) return;
+      var values = Array.from(getSelection(pill));
+      var label = pill.querySelector('.filter-trigger-label');
+      if (label) {
+        var baseLabel = pill.getAttribute('data-filter-label') || pill.getAttribute('data-filter-title') || '';
+        var total = parseInt(pill.getAttribute('data-filter-total') || '0', 10);
+        label.textContent = values.length || !total ? baseLabel : baseLabel + ' (' + total + ')';
+      }
+      var maxTags = parseInt(tags.getAttribute('data-max-tags') || '2', 10);
+      if (!maxTags || maxTags < 1) maxTags = 2;
+      while (tags.firstChild) tags.removeChild(tags.firstChild);
+      values.slice(0, maxTags).forEach(function (value) {
+        var tag = document.createElement('span');
+        tag.className = 'filter-trigger-tag';
+        tag.textContent = value;
+        tag.title = value;
+        tags.appendChild(tag);
+      });
+      var overflow = values.length - maxTags;
+      if (overflow > 0) {
+        var more = document.createElement('span');
+        more.className = 'filter-trigger-tag filter-trigger-more';
+        more.textContent = '+' + overflow;
+        more.title = values.length + ' selected';
+        tags.appendChild(more);
+      }
+      pill.classList.toggle('filter-inline-active', values.length > 0);
+    }
     document.addEventListener('click', function (e) {
       var btn = e.target.closest('.filter-inline-apply, .filter-inline-clear');
       if (!btn) return;
@@ -116,17 +173,26 @@
       var pill = btn.closest('.filter-inline-multi');
       if (!pill) return;
       var field = pill.getAttribute('data-filter-field');
-      var checks = pill.querySelectorAll('.filter-inline-check');
+      var selected = getSelection(pill);
       if (btn.classList.contains('filter-inline-clear')) {
-        Array.prototype.forEach.call(checks, function (c) { c.checked = false; });
+        selected.clear();
+        syncRenderedChecks(pill);
         window.location.href = buildUrl(field, []);
         return;
       }
-      var vals = [];
-      Array.prototype.forEach.call(checks, function (c) {
-        if (c.checked) vals.push(c.getAttribute('data-value'));
-      });
-      window.location.href = buildUrl(field, vals);
+      window.location.href = buildUrl(field, Array.from(selected));
+    });
+    document.addEventListener('change', function (e) {
+      var check = e.target;
+      if (!check.classList || !check.classList.contains('filter-inline-check')) return;
+      var pill = check.closest('.filter-inline-multi');
+      if (!pill) return;
+      var selected = getSelection(pill);
+      var value = check.getAttribute('data-value');
+      if (check.checked) selected.add(value); else selected.delete(value);
+      var li = check.closest('li');
+      if (li) li.classList.toggle('selected', check.checked);
+      renderTriggerTags(pill);
     });
     document.addEventListener('input', function (e) {
       var input = e.target;
@@ -188,7 +254,6 @@
       var url = new URL(window.location.href);
       url.searchParams.set('ajax_distinct', '1');
       url.searchParams.set('field', fieldName);
-      url.searchParams.set('limit', '200');
       url.searchParams.set('offset', String(offset));
       if (q) url.searchParams.set('q', q); else url.searchParams.delete('q');
       fetch(url.toString(), { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
@@ -209,14 +274,24 @@
             var isMulti = details.getAttribute('data-multi') === 'true';
             if (isMulti) {
               var label = document.createElement('label');
+              label.className = 'filter-inline-option';
               var cb = document.createElement('input');
+              var valueString = String(v);
               cb.type = 'checkbox';
               cb.className = 'filter-inline-check';
-              cb.setAttribute('data-value', String(v));
+              cb.setAttribute('data-value', valueString);
+              cb.checked = getSelection(details).has(valueString);
+              if (cb.checked) li.classList.add('selected');
               var span = document.createElement('span');
-              span.textContent = String(v);
+              span.className = 'filter-inline-text';
+              span.textContent = valueString;
+              var checkmark = document.createElement('span');
+              checkmark.className = 'filter-inline-checkmark';
+              checkmark.setAttribute('aria-hidden', 'true');
+              checkmark.textContent = '✓';
               label.appendChild(cb);
               label.appendChild(span);
+              label.appendChild(checkmark);
               li.appendChild(label);
             } else {
               var a = document.createElement('a');
@@ -263,6 +338,9 @@
     // template sets to the spec's total_count) compared to the
     // rendered child count.
     document.addEventListener('DOMContentLoaded', function () {
+      document.querySelectorAll('.filter-inline-multi').forEach(function (pill) {
+        syncRenderedChecks(pill);
+      });
       document.querySelectorAll('.filter-inline-list').forEach(function (ul) {
         var total = parseInt(ul.getAttribute('data-total') || '0', 10);
         var shown = ul.children.length;

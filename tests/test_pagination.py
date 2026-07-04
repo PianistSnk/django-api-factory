@@ -40,6 +40,21 @@ class PagedPost(APIModel):
 
 # --- get_api_urls forwards page + page_size to API (T2.1 MVP) ------------
 
+def test_apiadmin_defaults_favor_dynamic_api_totals():
+    """New API admins should need fewer magic constants.
+
+    Large pages make small APIs feel close to unpaginated; totals should come
+    from live API metadata (`X-Total-Count`) unless a legacy API needs an
+    explicit fallback; distinct dropdowns start small and load/search more.
+    """
+    admin = APIAdmin.__new__(APIAdmin)
+
+    assert admin.list_per_page == 2000
+    assert admin.expected_total is None
+    assert admin.list_filter == []
+    assert admin.filter_distinct_limit == 20
+
+
 def test_get_api_urls_passes_request_page_to_api():
     """Server-side pagination: the user's `?p=N` is the page we ask
     the API for (not display-only anymore). The API gets `page=N`."""
@@ -529,6 +544,119 @@ def test_get_api_data_reads_x_total_count_from_response():
     )
 
 
+def test_get_api_data_reuses_api_result_within_same_request():
+    """Django admin may call `get_api_data` repeatedly while rendering
+    one changelist page. Those calls should share one external API hit."""
+    admin = APIAdmin.__new__(APIAdmin)
+    admin.model = PagedPost
+    admin.list_per_page = 10
+    admin.expected_total = None
+    admin.json_to_filter = None
+    admin.multi_value_separator = "、"
+    admin.request_timeout = 5
+    admin.cache_backend_class = None  # type: ignore[assignment]
+
+    fake_response = MagicMock()
+    fake_response.status_code = 200
+    fake_response.content = (
+        b'[{"id": 1, "userId": 1, "title": "t", "body": "b"}]'
+    )
+    fake_response.headers = {"X-Total-Count": "10"}
+
+    req = RequestFactory().get("/admin/tests/pagedpost/?p=1")
+    with patch(
+        "django_api_factory.admin.requests.get",
+        return_value=fake_response,
+    ) as mocked_get:
+        first_qs, first_fields = admin.get_api_data(req)
+        second_qs, second_fields = admin.get_api_data(req)
+
+    assert mocked_get.call_count == 1
+    assert first_fields == ["userId", "title", "body"]
+    assert second_fields == first_fields
+    assert len(first_qs._result_cache) == 1
+    assert len(second_qs._result_cache) == 1
+    assert getattr(admin, "_api_filtered_total", None) == 10
+
+
+def test_get_api_data_reads_total_from_response_body():
+    """Real APIs often return totals in JSON instead of X-Total-Count."""
+    from django.test import RequestFactory
+    from unittest.mock import patch, MagicMock
+    from django_api_factory.admin import APIAdmin
+
+    class BodyTotalPost(APIModel):
+        @classmethod
+        def urls(cls, page=1, page_size=50, **kwargs):
+            return f"https://example.com/body-total?page={page}&page_size={page_size}"
+
+        @classmethod
+        def cache(cls, **kwargs):
+            return None
+
+        @classmethod
+        def parse_response(cls, response_data):
+            return response_data["results"]
+
+        class Meta:
+            app_label = "tests"
+
+    admin = APIAdmin.__new__(APIAdmin)
+    admin.model = BodyTotalPost
+    admin.list_per_page = 10
+    admin.expected_total = None
+    admin.json_to_filter = None
+    admin.multi_value_separator = "、"
+    admin.request_timeout = 5
+    admin.cache_backend_class = None  # type: ignore[assignment]
+
+    fake_response = MagicMock()
+    fake_response.status_code = 200
+    fake_response.content = (
+        b'{"meta":{"results":{"total":20328575}},'
+        b'"results":[{"id":1,"userId":1,"title":"t","body":"b"}]}'
+    )
+    fake_response.headers = {}
+
+    with patch("django_api_factory.admin.requests.get", return_value=fake_response):
+        req = RequestFactory().get("/admin/tests/bodytotalpost/?p=1")
+        admin.get_api_data(req)
+
+    assert getattr(admin, "_api_filtered_total", None) == 20_328_575
+
+
+def test_get_api_data_clears_stale_x_total_count_without_header():
+    """A dynamic total from one request must not leak into the next.
+
+    Django reuses the ModelAdmin instance, so an API/cache path without
+    `X-Total-Count` should fall back cleanly instead of keeping an old count.
+    """
+    from django.test import RequestFactory
+    from unittest.mock import patch, MagicMock
+    from django_api_factory.admin import APIAdmin
+
+    admin = APIAdmin.__new__(APIAdmin)
+    admin.model = PagedPost
+    admin.list_per_page = 10
+    admin.expected_total = None
+    admin.json_to_filter = None
+    admin.multi_value_separator = "、"
+    admin.request_timeout = 5
+    admin.cache_backend_class = None  # type: ignore[assignment]
+    admin._api_filtered_total = 999
+
+    fake_response = MagicMock()
+    fake_response.status_code = 200
+    fake_response.content = b'[{"id": 1, "userId": 1, "title": "t", "body": "b"}]'
+    fake_response.headers = {}
+
+    with patch("django_api_factory.admin.requests.get", return_value=fake_response):
+        req = RequestFactory().get("/admin/tests/pagedpost/?p=1")
+        admin.get_api_data(req)
+
+    assert not hasattr(admin, "_api_filtered_total")
+
+
 def test_get_paginator_prefers_api_filtered_total_over_expected_total():
     """When the API returns X-Total-Count, the paginator should use
     that (the FILTERED size), NOT expected_total (the unfiltered
@@ -656,7 +784,7 @@ def test_changelist_view_returns_json_when_ajax_distinct():
     admin.filter_distinct_limit = 200
     # Stub get_filter_choices to return a known payload (mirrors what
     # BigPostAdmin's /distinct override would return).
-    def fake_get_filter_choices(field_name, request, q="", offset=0, limit=200):
+    def fake_get_filter_choices(field_name, request, q="", offset=0, limit=None):
         return {"field": "userId", "count": 10000, "returned": 5,
                 "truncated": True, "values": [1, 2, 3, 4, 5]}
     admin.get_filter_choices = fake_get_filter_choices
@@ -689,7 +817,7 @@ def test_changelist_view_ajax_distinct_propagates_q_to_filter_choices():
     admin.model = _Stub
     admin.request_timeout = 5
     captured_kwargs = {}
-    def fake_get_filter_choices(field_name, request, q="", offset=0, limit=200):
+    def fake_get_filter_choices(field_name, request, q="", offset=0, limit=None):
         captured_kwargs["q"] = q
         captured_kwargs["offset"] = offset
         captured_kwargs["limit"] = limit
@@ -704,6 +832,73 @@ def test_changelist_view_ajax_distinct_propagates_q_to_filter_choices():
     )
     assert captured_kwargs["offset"] == 20
     assert captured_kwargs["limit"] == 50
+
+
+def test_changelist_view_ajax_distinct_uses_admin_default_limit():
+    """No explicit `?limit=` means the AJAX endpoint uses the admin default."""
+    from django.test import RequestFactory
+    from django_api_factory.admin import APIAdmin
+    from django.db import models
+
+    class _DefaultLimitStub(models.Model):
+        app_label = "tests"
+        class Meta:
+            app_label = "tests"
+
+    admin = APIAdmin.__new__(APIAdmin)
+    admin.model = _DefaultLimitStub
+    admin.request_timeout = 5
+    admin.filter_distinct_limit = 20
+    captured_kwargs = {}
+
+    def fake_get_filter_choices(field_name, request, q="", offset=0, limit=None):
+        captured_kwargs["limit"] = limit
+        return {"values": ["x"], "count": 1, "truncated": False}
+
+    admin.get_filter_choices = fake_get_filter_choices
+    req = RequestFactory().get(
+        "/admin/api/_stub/?ajax_distinct=1&field=userId"
+    )
+    admin._ajax_distinct(req)
+
+    assert captured_kwargs["limit"] == 20
+
+
+def test_default_get_filter_choices_uses_configured_distinct_endpoint():
+    """Large admins can opt into server distinct with one resource attr."""
+    from django.test import RequestFactory
+    from unittest.mock import patch, MagicMock
+    from django_api_factory.admin import APIAdmin
+
+    admin = APIAdmin.__new__(APIAdmin)
+    admin.model = PagedPost
+    admin.request_timeout = 5
+    admin.filter_distinct_resource = "posts"
+    admin.filter_distinct_limit = 20
+    admin.filter_distinct_cache_ttl = 0
+
+    fake_response = MagicMock()
+    fake_response.status_code = 200
+    fake_response.json.return_value = {
+        "values": [1, 2],
+        "count": 100,
+        "returned": 2,
+        "truncated": True,
+    }
+
+    req = RequestFactory().get("/admin/tests/pagedpost/")
+    with patch(
+        "django_api_factory.admin.requests.get",
+        return_value=fake_response,
+    ) as get:
+        result = admin.get_filter_choices("userId", req, q="7", offset=40, limit=50)
+
+    assert result["values"] == [1, 2]
+    called_url = get.call_args.args[0]
+    assert called_url == (
+        "https://example.com/distinct?"
+        "field=userId&offset=40&limit=20&resource=posts&q=7"
+    )
 
 
 def test_apifilter_exposes_total_count_for_template():
@@ -786,16 +981,17 @@ def test_default_get_filter_choices_returns_none_when_too_large():
 
 
 def test_default_get_filter_choices_signature_accepts_q_offset_limit():
-    """The new signature (q='', offset=0, limit=200) is what the
+    """The new signature (q='', offset=0, limit=None) is what the
     AJAX endpoint uses; subclasses that override must accept it
     (BigPostAdmin does). Old call sites that pass just (field, req)
-    should still work via Python kwargs (the defaults are the
-    "no search, no offset, default limit" case)."""
+    should still work via Python kwargs (the default limit comes from
+    `filter_distinct_limit`)."""
     from django.test import RequestFactory
     from django_api_factory.admin import APIAdmin
     from django.db import models
 
-    class DistinctTestModelB(models.Model):  # renamed from DistinctTestModel (line 765) — was colliding with the same-named class on line 739, both ending up registered as 'tests.distincttestmodel'
+    # Renamed from DistinctTestModel to avoid colliding in the tests app.
+    class DistinctTestModelB(models.Model):
         userId = models.IntegerField()
         class Meta:
             app_label = "tests"

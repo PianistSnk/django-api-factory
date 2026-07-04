@@ -1,10 +1,9 @@
 """Tests for APIFilter (filter.py)."""
 
-import pytest
 from django.test import RequestFactory
 
 from django_api_factory.admin import APIAdmin
-from django_api_factory.filter import APIFilter
+from django_api_factory.filter import APIFilter, APIMultiSelectFilter
 from django_api_factory.models import APIModel
 from django_api_factory.mixins import schema_registry
 
@@ -26,7 +25,7 @@ class FilterItem(APIModel):
         app_label = "tests"
 
 
-def _make_filter(json_to_filter, params=None):
+def _make_filter(json_to_filter, params=None, filter_class=APIFilter):
     """
     Build a working APIFilter instance. The parent class
     (`AllValuesFieldListFilter.__init__`) tries to query the database
@@ -39,7 +38,7 @@ def _make_filter(json_to_filter, params=None):
     admin.json_to_filter = json_to_filter
     admin.empty_value_display = "-"
     request = RequestFactory().get("/admin/tests/filteritem/")
-    f = APIFilter(
+    f = filter_class(
         FilterItem._meta.get_field("category"),
         request, params or {}, FilterItem, admin, "category"
     )
@@ -114,7 +113,10 @@ def test_filter_choice_links_drop_page_param():
 
     assert choices
     assert all("p=" not in choice["query_string"] for choice in choices)
-    assert any("category=%E9%A6%99%E8%95%89" in choice["query_string"] for choice in choices)
+    assert any(
+        "category=%E9%A6%99%E8%95%89" in choice["query_string"]
+        for choice in choices
+    )
 
 
 def test_filter_all_link_is_not_empty_when_it_clears_last_param():
@@ -143,6 +145,83 @@ def test_filter_all_link_is_not_empty_when_it_clears_last_param():
 
     assert all_choice["display"] == "All"
     assert all_choice["query_string"] == "?"
+
+
+def test_multi_filter_choices_skip_all_and_restore_multiple_selected_values():
+    """Multi-select choices are inert options, not immediate filter links."""
+    from django.http import QueryDict
+
+    f, _, _ = _make_filter(
+        [{"category": "苹果"}, {"category": "香蕉"}, {"category": "梨"}],
+        params={"category": ["苹果,香蕉"]},
+        filter_class=APIMultiSelectFilter,
+    )
+
+    class FakeChangeList:
+        add_facets = False
+
+        def get_query_string(self, new_params=None, remove=None):
+            query = QueryDict("p=9&category=苹果,香蕉", mutable=True)
+            for key in remove or []:
+                query.pop(key, None)
+            for key, value in (new_params or {}).items():
+                query[key] = value
+            return "?" + query.urlencode()
+
+    choices = list(f.choices(FakeChangeList()))
+
+    assert [choice["display"] for choice in choices] == ["苹果", "香蕉", "梨"]
+    assert [choice["value"] for choice in choices] == ["苹果", "香蕉", "梨"]
+    assert {
+        choice["value"]
+        for choice in choices
+        if choice["selected"]
+    } == {"苹果", "香蕉"}
+
+
+def test_multi_filter_trigger_collapses_selected_values():
+    """ElementUI-style trigger shows first tags plus +N overflow."""
+    f, _, _ = _make_filter(
+        [{"category": "苹果"}],
+        params={"category": ["苹果,香蕉,梨,桃子,葡萄,西瓜,芒果,橙子"]},
+        filter_class=APIMultiSelectFilter,
+    )
+
+    assert f.selected_values == [
+        "苹果", "香蕉", "梨", "桃子", "葡萄", "西瓜", "芒果", "橙子",
+    ]
+    assert f.selected_preview_values == ["苹果", "香蕉"]
+    assert f.selected_overflow_count == 6
+
+
+def test_apiadmin_auto_generated_filters_are_multi_select():
+    """Auto-generated API filters should use pick-many-then-apply UX."""
+    admin = APIAdmin.__new__(APIAdmin)
+    admin.list_filter = []
+    admin.api_list = ["category", "status"]
+
+    filters = list(admin.get_list_filter(RequestFactory().get("/admin/")))
+
+    assert filters == [
+        ("category", APIMultiSelectFilter),
+        ("status", APIMultiSelectFilter),
+    ]
+    assert admin.api_list == ["category", "status"]
+
+
+def test_apiadmin_auto_generated_filters_support_exclude_list():
+    """Default is all API fields; users can exclude noisy columns."""
+    admin = APIAdmin.__new__(APIAdmin)
+    admin.list_filter = []
+    admin.list_filter_exclude = ["image", "password"]
+    admin.api_list = ["category", "image", "status", "password"]
+
+    filters = list(admin.get_list_filter(RequestFactory().get("/admin/")))
+
+    assert filters == [
+        ("category", APIMultiSelectFilter),
+        ("status", APIMultiSelectFilter),
+    ]
 
 
 def test_filter_empty_value_display():
@@ -251,19 +330,16 @@ def test_apiadmin_default_get_filter_choices_returns_none():
     assert admin.get_filter_choices("userId", req) is None
 
 
-# --- Distinct cap + "X of Y" title badge (Jun 2026) ----------------------
+# --- Distinct cap + true-total title badge (Jun 2026) ---------------------
 #
 # After M2 cross-page distinct, the dropdown was rendering 10_000
 # userIds / 100_000 titles into 41MB of HTML. The fix: cap distinct
-# to 200 (configurable) and show "(X of Y)" in the title so the
-# user knows they're seeing a truncated slice.
+# to 200 (configurable) and show the TRUE total count in the idle title.
 
-def test_apifilter_title_shows_x_of_y_when_truncated():
+def test_apifilter_title_shows_true_total_when_truncated():
     """When get_filter_choices returns {"values": [...200...], "count":
-    10_000, "truncated": True}, the filter's title must show
-    "category (200 of 10000)" — the rendered count AND the true total.
-    The legacy single-count badge "(200)" hides the truncation and
-    made users think the dataset only had 200 values."""
+    10_000, "truncated": True}, the idle filter's title must show the
+    true total only, not "200 of 10000"."""
     f, admin, _ = _make_filter([])
     admin.get_filter_choices = lambda field_name, request: {
         "values": list(range(200)),
@@ -275,8 +351,24 @@ def test_apifilter_title_shows_x_of_y_when_truncated():
         RequestFactory().get("/admin/tests/filteritem/"),
         {}, FilterItem, admin, "category",
     )
-    assert f.title == "category (200 of 10000)", f"Got {f.title!r}"
+    assert f.title == "category (10000)", f"Got {f.title!r}"
     assert len(f.lookup_choices) == 200
+
+
+def test_apifilter_title_omits_count_when_selected():
+    """Selected filters show value tags, so the count badge is hidden."""
+    f, admin, _ = _make_filter([])
+    admin.get_filter_choices = lambda field_name, request: {
+        "values": list(range(200)),
+        "count": 10_000,
+        "truncated": True,
+    }
+    f = APIFilter(
+        FilterItem._meta.get_field("category"),
+        RequestFactory().get("/admin/tests/filteritem/"),
+        {"category": ["1,2"]}, FilterItem, admin, "category",
+    )
+    assert f.title == "category", f"Got {f.title!r}"
 
 
 def test_apifilter_title_shows_just_count_when_not_truncated():

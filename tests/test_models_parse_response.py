@@ -1,12 +1,15 @@
-"""Tests for APIModel.parse_response — 4 industry-standard envelope shapes.
+"""Tests for APIModel.parse_response default API response handling.
 
 We support (in priority order, first match wins):
 1. Bare list              [{...}, {...}]            (REST canonical)
 2. {"data": [...]}        (custom APIs / Laravel)
 3. {"items": [...]}       (older internal APIs)
 4. {"results": [...]}     (DRF PageNumberPagination default)
+5. {"rows": [...]} / {"records": [...]}
+6. Any payload with exactly one top-level list value, e.g. {"users": [...]}
 
-Anything else raises ValueError with a developer-actionable message.
+Nested row dicts are flattened by default. Anything else raises ValueError
+with a developer-actionable message.
 
 These tests don't spin up a full admin — they exercise `parse_response`
 directly on a tiny APIModel subclass to keep the unit-test scope tight.
@@ -22,13 +25,7 @@ from django_api_factory.models import APIModel
 class _DemoModel(APIModel):
     """Minimal concrete APIModel for parse_response unit tests."""
 
-    @classmethod
-    def urls(cls, **kwargs):
-        return "http://example.com/demo"
-
-    @classmethod
-    def cache(cls, **kwargs):
-        return None
+    url = "http://example.com/demo"
 
     class Meta(APIModel.Meta):
         app_label = "tests"
@@ -43,7 +40,7 @@ class _DemoModel(APIModel):
 
 def test_parse_response_bare_list():
     rows = [{"id": 1, "title": "a"}, {"id": 2, "title": "b"}]
-    assert _DemoModel.parse_response(rows) is rows
+    assert _DemoModel.parse_response(rows) == rows
 
 
 def test_parse_response_empty_list():
@@ -52,7 +49,7 @@ def test_parse_response_empty_list():
 
 
 # ---------------------------------------------------------------------------
-# The 3 envelope shapes we recognize.
+# Common envelope shapes we recognize explicitly.
 # ---------------------------------------------------------------------------
 
 
@@ -74,6 +71,47 @@ def test_parse_response_results_envelope():
         "results": [{"id": 1}, {"id": 2}],
     }
     assert _DemoModel.parse_response(payload) == [{"id": 1}, {"id": 2}]
+
+
+def test_parse_response_unique_list_key_envelope():
+    """A real API can use its resource name as the list key."""
+    payload = {
+        "users": [{"id": 1, "firstName": "Terry"}],
+        "total": 208,
+        "skip": 0,
+        "limit": 1000,
+    }
+    assert _DemoModel.parse_response(payload) == [{"id": 1, "firstName": "Terry"}]
+
+
+def test_parse_response_flattens_nested_rows():
+    payload = {
+        "users": [
+            {
+                "id": 1,
+                "company": {
+                    "name": "Acme",
+                    "address": {"city": "Paris"},
+                },
+                "tags": ["vip", "trial"],
+            }
+        ],
+        "total": 1,
+    }
+
+    assert _DemoModel.parse_response(payload) == [
+        {
+            "id": 1,
+            "companyName": "Acme",
+            "companyAddressCity": "Paris",
+            "tags": "vip、trial",
+        }
+    ]
+
+
+def test_url_only_model_uses_default_url_and_cache():
+    assert _DemoModel.urls(page=2, page_size=50) == "http://example.com/demo"
+    assert _DemoModel.cache() is None
 
 
 # ---------------------------------------------------------------------------
@@ -107,9 +145,9 @@ def test_parse_response_priority_items_over_results():
 # ---------------------------------------------------------------------------
 
 
-def test_parse_response_unknown_envelope_key_raises():
-    """An envelope with a non-standard key (`payload`) should raise."""
-    payload = {"payload": [{"id": 1}], "code": 200}
+def test_parse_response_unknown_nested_envelope_raises():
+    """A deeper non-standard envelope still needs an override."""
+    payload = {"payload": {"rows": [{"id": 1}]}, "code": 200}
     with pytest.raises(ValueError) as exc_info:
         _DemoModel.parse_response(payload)
     msg = str(exc_info.value)

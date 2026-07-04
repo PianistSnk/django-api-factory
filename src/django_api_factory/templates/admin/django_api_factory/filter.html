@@ -2,15 +2,24 @@
 {% comment %}
 Multi-select: checkbox + label. JS in change_list.html collects checked `data-value`s and builds the `?field=v1,v2,v3` URL on 确定 click.
 {% endcomment %}
-<details name="filter-inline-group" class="filter-inline {% if spec.is_multi %}filter-inline-multi{% else %}filter-inline-single{% endif %}" data-filter-title="{{ title }}" data-filter-field="{{ spec.field_path }}" data-multi="{{ spec.is_multi|yesno:'true,false' }}">
+<details name="filter-inline-group" class="filter-inline {% if spec.is_multi %}filter-inline-multi{% else %}filter-inline-single{% endif %}{% if spec.lookup_val %} filter-inline-active{% endif %}" data-filter-title="{{ title }}" data-filter-label="{{ spec.field.verbose_name }}" data-filter-total="{{ spec.total_count|default:0 }}" data-filter-field="{{ spec.field_path }}" data-multi="{{ spec.is_multi|yesno:'true,false' }}">
   <summary class="filter-trigger">
     {% comment %}
-    Title is set by APIFilter.__init__ to include the count badge
-    ("userId (200 of 10000)" when truncated, "userId (10)" when
-    not). Don't add a separate `{{ choices|length }}` suffix here —
-    the spec already encodes the truncation in its title.
+    Title is set by APIFilter.__init__: idle filters show the true total
+    count ("userId (10000)"), selected filters show only the field name
+    because selected values are rendered as tags.
     {% endcomment %}
     <span class="filter-trigger-label">{{ title }}</span>
+    {% if spec.is_multi %}
+      <span class="filter-trigger-tags" data-max-tags="{{ spec.trigger_tag_limit|default:2 }}">
+        {% for value in spec.selected_preview_values %}
+          <span class="filter-trigger-tag">{{ value }}</span>
+        {% endfor %}
+        {% if spec.selected_overflow_count %}
+          <span class="filter-trigger-tag filter-trigger-more">+{{ spec.selected_overflow_count }}</span>
+        {% endif %}
+      </span>
+    {% endif %}
   </summary>
   <div class="filter-popup">
     <input type="text" class="filter-inline-search" placeholder="筛选 {{ title }}..." />
@@ -18,9 +27,10 @@ Multi-select: checkbox + label. JS in change_list.html collects checked `data-va
       {% for choice in choices %}
         <li{% if choice.selected %} class="selected"{% endif %}>
           {% if spec.is_multi %}
-            <label>
+            <label class="filter-inline-option">
               <input type="checkbox" class="filter-inline-check" data-value="{{ choice.value|default:choice.display }}" {% if choice.selected %}checked{% endif %} />
-              <span>{{ choice.display }}</span>
+              <span class="filter-inline-text">{{ choice.display }}</span>
+              <span class="filter-inline-checkmark" aria-hidden="true">✓</span>
             </label>
           {% else %}
             <a href="{{ choice.query_string|iriencode }}">{{ choice.display }}</a>
@@ -49,18 +59,65 @@ Multi-select: checkbox + label. JS in change_list.html collects checked `data-va
 </details>
 
 <style>
-  .filter-inline { display: inline-block; margin: 0 6px 6px 0; position: relative; vertical-align: top; }
-  .filter-inline > summary { list-style: none; cursor: pointer; padding: 2px 8px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 3px; user-select: none; }
+  .filter-inline { display: inline-block; margin: 0 8px 8px 0; position: relative; vertical-align: top; }
+  .filter-inline > summary {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #dcdfe6;
+    border-radius: 4px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.04);
+    box-sizing: border-box;
+    color: #606266;
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 13px;
+    gap: 6px;
+    line-height: 1;
+    max-width: 420px;
+    min-height: 34px;
+    padding: 3px 10px;
+    transition: color .15s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease;
+    user-select: none;
+    white-space: nowrap;
+  }
   .filter-inline > summary::-webkit-details-marker { display: none; }
-  .filter-inline[open] > summary { background: #e8e8e8; border-color: #999; }
+  .filter-inline > summary::after { color: #909399; content: "▾"; font-size: 10px; line-height: 1; transition: transform .15s ease, color .15s ease; }
+  .filter-inline > summary:hover { background: #ecf5ff; border-color: #409eff; color: #409eff; }
+  .filter-inline > summary:hover::after { color: #409eff; }
+  .filter-inline[open] > summary, .filter-inline-active > summary { background: #ecf5ff; border-color: #409eff; box-shadow: 0 2px 6px rgba(64,158,255,.14); color: #409eff; }
+  .filter-inline[open] > summary::after, .filter-inline-active > summary::after { color: #409eff; }
+  .filter-inline[open] > summary::after { transform: rotate(180deg); }
+  .filter-trigger-label { flex: 0 0 auto; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+  .filter-trigger-tags { align-items: center; display: inline-flex; flex: 1 1 auto; gap: 4px; min-width: 0; overflow: hidden; }
+  .filter-trigger-tag {
+    align-items: center;
+    background: #f0f2f5;
+    border: 1px solid #e9e9eb;
+    border-radius: 3px;
+    box-sizing: border-box;
+    color: #909399;
+    display: inline-flex;
+    flex: 0 1 auto;
+    font-size: 12px;
+    line-height: 20px;
+    max-width: 92px;
+    overflow: hidden;
+    padding: 0 6px;
+    text-overflow: ellipsis;
+  }
+  .filter-trigger-more { background: #ecf5ff; border-color: #d9ecff; color: #409eff; flex: 0 0 auto; font-weight: 600; }
   .filter-popup { position: absolute; top: 100%; left: 0; z-index: 100; min-width: 200px; max-width: 320px; background: white; border: 1px solid #ccc; border-radius: 3px; box-shadow: 0 2px 6px rgba(0,0,0,.15); margin-top: 4px; padding: 4px; }
   .filter-inline-search { width: 100%; box-sizing: border-box; padding: 4px 6px; border: 1px solid #ddd; border-radius: 3px; outline: none; font-size: 13px; margin-bottom: 4px; }
   .filter-inline-list { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow-y: auto; }
   .filter-inline-list li { padding: 0; }
   .filter-inline-list label, .filter-inline-list a { display: flex; align-items: center; gap: 6px; padding: 3px 8px; text-decoration: none; cursor: pointer; }
+  .filter-inline-list label.filter-inline-option { position: relative; justify-content: space-between; }
   .filter-inline-list label:hover, .filter-inline-list a:hover { background: #f0f0f0; }
   .filter-inline-list li.selected label, .filter-inline-list li.selected a { font-weight: bold; background: #f0f7fc; }
-  .filter-inline-list input[type=checkbox] { margin: 0; }
+  .filter-inline-list input[type=checkbox].filter-inline-check { position: absolute; opacity: 0; pointer-events: none; }
+  .filter-inline-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .filter-inline-checkmark { color: #417690; font-weight: bold; margin-left: auto; visibility: hidden; }
+  .filter-inline-check:checked ~ .filter-inline-checkmark { visibility: visible; }
   .filter-popup-actions { display: flex; gap: 6px; padding: 6px 4px 0; margin-top: 4px; border-top: 1px solid #eee; }
   .filter-popup-actions button { flex: 1; padding: 4px 10px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 3px; cursor: pointer; }
   .filter-popup-actions button:hover { background: #e8e8e8; }

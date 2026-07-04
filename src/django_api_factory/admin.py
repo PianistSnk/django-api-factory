@@ -3,6 +3,7 @@ import json
 import locale
 import logging
 from typing import Optional
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
 from django.contrib import admin, messages
@@ -10,7 +11,7 @@ from django.contrib.admin.decorators import display
 from django.utils.safestring import mark_safe
 
 from django_api_factory.changelist import APIChangeList, APIADMIN_RESERVED_GET_PARAMS
-from django_api_factory.filter import APIFilter
+from django_api_factory.filter import APIMultiSelectFilter
 from django_api_factory.mixins import (
     ActionFormMixin,
     AuditLogMixin,
@@ -91,18 +92,21 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
     Subclasses typically just set:
         class PostAdmin(APIAdmin):
             list_display = ["id", "title", "body"]
-            list_filter = [("userId", APIFilter)]
+            list_filter = [("userId", APIMultiSelectFilter)]
     """
 
     change_list_template = "admin/django_api_factory/change_list.html"
-    # Server-side pagination: we only load the current page from the API,
-    # so "show all" would render a half-empty page. Disable the link by
-    # setting `list_max_show_all` to less than expected_total.
+    # Server-side pagination: default to a large page so small datasets
+    # feel close to "no pagination", while large external APIs still load
+    # a bounded slice. `?per_page=N` can override this per request.
     list_max_show_all = 1
     api_data = None
     api_list = None
     export_list = None
-    list_per_page = 50
+    list_per_page = 2000
+    expected_total = None
+    list_filter = []
+    list_filter_exclude = []
     search_fields = ["input_date"]
     list_display_links = None
     # `paras_list` holds the parameter NAMES this admin knows how to
@@ -166,8 +170,9 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         2. **Page-iteration fallback** — for server-side pagination, when
            `object_id` came from a different page (the detail URL has no
            `?p=N` so we don't know which page it was on). Walk pages
-           from page 1 up to `expected_total / page_size` and find the
-           row. Capped by `expected_total` so we don't hit the API forever.
+           up to the optional `expected_total / page_size` fallback and
+           find the row. Without `expected_total`, try the computed page
+           as a best effort and avoid unbounded API calls.
         3. Django's default ORM `super().get_object` as a final fallback.
 
         Returns the matching model instance, or None if not found.
@@ -186,8 +191,8 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
                         return self._build_mymodel_from_item(item)
 
         # Fast path 2: page iteration for server-side pagination.
-        # We don't know which page contains `object_id`. Walk pages
-        # from 1 until we find it or exhaust `expected_total`.
+        # We don't know which page contains `object_id`. If an optional
+        # expected_total fallback exists, use it to bound the slow walk.
         try:
             target_id = int(object_id)
         except (TypeError, ValueError):
@@ -365,9 +370,10 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         except (TypeError, ValueError):
             offset = 0
         try:
-            limit = int(request.GET.get("limit", "200") or "200")
+            default_limit = getattr(self, "filter_distinct_limit", 20)
+            limit = int(request.GET.get("limit", str(default_limit)) or default_limit)
         except (TypeError, ValueError):
-            limit = 200
+            limit = getattr(self, "filter_distinct_limit", 20)
         q = request.GET.get("q", "").strip()
         # Generic path: ask the admin's hook. Subclasses decide.
         payload = self.get_filter_choices(field_name, request, q=q,
@@ -387,19 +393,21 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
 
         If the user has declared `list_filter` on the admin class,
         honor it (this is the standard Django admin contract — and
-        it's the only way to mix APIFilter / APIMultiSelectFilter
-        per field, since otherwise every API field would get a
-        single-select APIFilter).
+        it's the way to mix APIFilter / APIMultiSelectFilter per field.
 
-        Otherwise auto-generate (api_list, APIFilter) for every
-        API-returned field (the legacy default behavior, kept so
-        existing subclasses don't need to opt in).
+        Otherwise auto-generate (api_list, APIMultiSelectFilter) for every
+        API-returned field except names in `list_filter_exclude`, so choices
+        can be picked first and applied in one commit.
         """
         if self.list_filter:
             return self.list_filter
         api_list = self.api_list
-        self.api_list = None
-        return ((api, APIFilter) for api in api_list)
+        excluded = set(getattr(self, "list_filter_exclude", []) or [])
+        return (
+            (api, APIMultiSelectFilter)
+            for api in api_list
+            if api not in excluded
+        )
 
     # --- Filter distinct values (Jun 2026 cross-page filter) -----------
     #
@@ -412,6 +420,27 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
     # falls back to per-page distinct (legacy behavior, kept so
     # existing subclasses without a distinct endpoint don't break).
 
+    # `filter_distinct_limit`: how many options the filter dropdown loads
+    # initially / per AJAX page. Keep this small; search + load-more handles
+    # the rest without making the filter bar heavy.
+    filter_distinct_limit = 20
+
+    # Server-side distinct endpoint configuration. If your API exposes
+    # `/distinct?resource=<resource>&field=<field>&q=<q>&offset=N&limit=M`,
+    # set `filter_distinct_resource` to that API resource name (and optionally
+    # `filter_distinct_path` if the list endpoint path differs). Then the
+    # default `get_filter_choices()` calls that endpoint automatically.
+    # For different shapes, override `get_filter_distinct_url()` instead of
+    # rewriting the whole `get_filter_choices()` method.
+    filter_distinct_url = None
+    filter_distinct_resource = None
+    filter_distinct_path = None
+    filter_distinct_resource_param = "resource"
+    filter_distinct_field_param = "field"
+    filter_distinct_q_param = "q"
+    filter_distinct_offset_param = "offset"
+    filter_distinct_limit_param = "limit"
+
     # `filter_distinct_cache_ttl`: how long to cache the per-field
     # distinct-values set. Set to 0 to disable caching (the
     # default impl then re-fetches every time, which is fine for
@@ -422,13 +451,13 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
     # default `get_filter_choices` impl will fetch when computing
     # the full distinct set. Past this, the default returns None
     # (legacy per-page behavior) and subclasses with large datasets
-    # should override `get_filter_choices` to call a server-side
-    # /distinct endpoint (like BigPostAdmin does for 100k rows).
+    # should configure a server-side /distinct endpoint (or override
+    # `get_filter_distinct_url` for custom endpoint shapes).
     # The cap protects admins that use a real internal API from
     # accidentally fetching 10_000 pages on first load.
     filter_distinct_max_rows = 1000
 
-    def get_filter_choices(self, field_name, request, q="", offset=0, limit=200):
+    def get_filter_choices(self, field_name, request, q="", offset=0, limit=None):
         """Return distinct values for `field_name` (server-side
         search + paginated), or None to fall back to per-page
         legacy.
@@ -439,7 +468,8 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
             q: server-side search term (substring match, case-
                insensitive). Empty string = no search.
             offset: skip this many values (for load-more pagination)
-            limit: return at most this many values (200 is the UI cap)
+            limit: return at most this many values (defaults to
+               `filter_distinct_limit`)
 
         Returns one of:
             None  — legacy per-page distinct (no search, no load-more)
@@ -452,13 +482,22 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         `filter_distinct_max_rows` AND/OR `expected_total`), fetch
         all pages once via `get_api_data`, aggregate, cache, and
         serve search/offset/limit from the cache. For LARGE
-        datasets, return None and let the subclass override
-        (e.g. BigPostAdmin → mock server's /distinct?q=...).
-
-        Subclasses that already have a server-side distinct endpoint
-        override this to call that endpoint and pass `q`/`offset`/
-        `limit` through. The result shape must match.
+        datasets, configure `filter_distinct_resource` (standard
+        endpoint) or override `get_filter_distinct_url` (custom
+        endpoint shape).
         """
+        limit = limit or getattr(self, "filter_distinct_limit", 20)
+
+        server_payload = self._get_server_filter_choices(
+            field_name,
+            request,
+            q=q,
+            offset=offset,
+            limit=limit,
+        )
+        if server_payload is not None:
+            return server_payload
+
         # No q and no offset/limit shortcut: try cache or return None.
         if not q and offset == 0:
             full = self._get_filter_distinct_cache(field_name, request)
@@ -480,6 +519,127 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         return self._slice_distinct_payload(full, q, offset, limit)
 
     # --- Default get_filter_choices helpers (Jun 2026) -------------------
+
+    def get_filter_distinct_url(self, field_name, request, q="", offset=0, limit=None):
+        """Build the server-side distinct URL, or return None.
+
+        Default convention:
+            <api-base>/distinct?resource=<resource>&field=<field>
+        where `<api-base>` is inferred from `model.urls(...)` and
+        `filter_distinct_resource` / `filter_distinct_path`.
+
+        Override this method when the external API uses a different endpoint
+        shape, but keep `get_filter_choices()` inherited.
+        """
+        endpoint = getattr(self, "filter_distinct_url", None)
+        resource = getattr(self, "filter_distinct_resource", None)
+        if not endpoint:
+            if not resource:
+                return None
+            path = getattr(self, "filter_distinct_path", None) or resource
+            try:
+                list_url = self.model.urls(page=1, page_size=1)
+            except TypeError:
+                list_url = self.model.urls()
+            marker = f"/{path}"
+            if marker not in list_url:
+                return None
+            endpoint = list_url.split(marker, 1)[0] + "/distinct"
+
+        params = {
+            getattr(self, "filter_distinct_field_param", "field"): field_name,
+            getattr(self, "filter_distinct_offset_param", "offset"): offset,
+            getattr(self, "filter_distinct_limit_param", "limit"): limit,
+        }
+        resource_param = getattr(self, "filter_distinct_resource_param", "resource")
+        if resource and resource_param:
+            params[resource_param] = resource
+        if q:
+            params[getattr(self, "filter_distinct_q_param", "q")] = q
+        return self._add_query_params(endpoint, params)
+
+    def _add_query_params(self, url, params):
+        parts = urlsplit(url)
+        query = dict(parse_qsl(parts.query, keep_blank_values=True))
+        for key, value in params.items():
+            if key and value not in (None, ""):
+                query[key] = str(value)
+        return urlunsplit((
+            parts.scheme,
+            parts.netloc,
+            parts.path,
+            urlencode(query),
+            parts.fragment,
+        ))
+
+    def _server_filter_choices_cache_key(self, url):
+        import hashlib
+        label = "unknown"
+        try:
+            label = self.model._meta.label_lower
+        except AttributeError:
+            pass
+        h = hashlib.md5(url.encode("utf-8")).hexdigest()[:12]
+        return f"distinct_endpoint:{label}:{h}"
+
+    def _get_server_filter_choices(
+        self,
+        field_name,
+        request,
+        q="",
+        offset=0,
+        limit=None,
+    ):
+        admin_limit = getattr(self, "filter_distinct_limit", 20) or 20
+        effective_limit = min(limit or admin_limit, admin_limit)
+        url = self.get_filter_distinct_url(
+            field_name,
+            request,
+            q=q,
+            offset=offset,
+            limit=effective_limit,
+        )
+        if not url:
+            return None
+
+        ttl = getattr(self, "filter_distinct_cache_ttl", 0)
+        cache_key = self._server_filter_choices_cache_key(url)
+        if ttl and getattr(self, "cache_backend", None):
+            try:
+                cached = self.cache_backend.get(cache_key)
+                if cached:
+                    return json.loads(cached.decode("utf-8"))
+            except Exception:
+                pass
+
+        try:
+            response = requests.get(url, timeout=self.request_timeout)
+            if response.status_code != 200:
+                return None
+            payload = response.json()
+        except Exception:
+            return None
+
+        if isinstance(payload, list):
+            payload = {
+                "values": payload,
+                "count": len(payload),
+                "returned": len(payload),
+                "truncated": False,
+            }
+        if not isinstance(payload, dict):
+            return None
+
+        if ttl and getattr(self, "cache_backend", None):
+            try:
+                self.cache_backend.set(
+                    cache_key,
+                    json.dumps(payload).encode("utf-8"),
+                    ttl,
+                )
+            except Exception:
+                pass
+        return payload
 
     def _raw_rows_cache_key(self, max_rows):
         """Redis key for the shared per-admin raw rows cache. All
@@ -514,6 +674,16 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         on first load. Now N fields share one walk.
         """
         cache_key = self._raw_rows_cache_key(max_rows)
+        memory_cache = getattr(self, "_filter_raw_rows_memory_cache", {})
+        if cache_key in memory_cache:
+            return memory_cache[cache_key]
+
+        current_rows = getattr(self, "json_to_filter", None)
+        if isinstance(current_rows, list) and 0 < len(current_rows) <= max_rows:
+            memory_cache[cache_key] = current_rows
+            self._filter_raw_rows_memory_cache = memory_cache
+            return current_rows
+
         ttl = getattr(self, "filter_distinct_cache_ttl", 0)
         if ttl and getattr(self, "cache_backend", None):
             try:
@@ -583,6 +753,8 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
                 )
             except Exception:
                 pass
+        memory_cache[cache_key] = all_rows
+        self._filter_raw_rows_memory_cache = memory_cache
         return all_rows
 
     def _fetch_all_distinct_values(self, field_name, request, max_rows):
@@ -599,15 +771,17 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         if not raw_rows:
             return None
         all_values = set()
+        ordered_values = []
         for item in raw_rows:
             if not isinstance(item, dict):
                 continue
             v = item.get(field_name)
             if v is not None and v not in all_values:
                 all_values.add(v)
+                ordered_values.append(v)
             if len(all_values) >= max_rows:
                 break
-        return sorted(all_values, key=lambda x: (x is None, str(x)))
+        return ordered_values
 
     def _build_request_for_page(self, request, page, page_size):
         """Clone `request` with `?p=N` forced so `get_api_data`
@@ -693,10 +867,10 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         builds an API URL with `?page=N&page_size=M` and fetches just
         that page from the API.
 
-        `count` uses `expected_total` (declared on the business class
-        as `expected_total = N`) — this is the total dataset size
-        the paginator needs to render page links. Without it, count
-        falls back to the size of whatever's in the current cache.
+        `count` prefers the live `X-Total-Count` captured by
+        `get_api_data`, then falls back to optional `expected_total`
+        for legacy APIs that cannot return total metadata. Without
+        either, count falls back to the size of the current cache.
         """
         from django.core.paginator import Paginator
         from django.utils.functional import cached_property
@@ -819,9 +993,9 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
     PER_PAGE_CHOICES = (10, 25, 50, 100, 200, 500, 2000, 10000)
 
     # Default cap on how many rows to fetch from the API on first load.
-    # Subclasses that know the full dataset size (via `expected_total`)
-    # override this implicitly. Bump this if you have a 100k+ dataset
-    # and you've set `expected_total` accordingly.
+    # `expected_total` remains an optional legacy fallback for APIs that
+    # cannot return total metadata; most server-side paginated APIs should
+    # instead expose X-Total-Count and let the paginator stay dynamic.
     DEFAULT_CACHE_FETCH_SIZE = 1000
 
     def _get_cache_fetch_size(self, request=None):
@@ -829,11 +1003,10 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         miss. With client-side pagination, this is the dataset size
         the user will paginate over.
 
-        Option B: prefer `expected_total` (declared by the admin, often
-        the real total the API knows), fall back to
-        `DEFAULT_CACHE_FETCH_SIZE` (1000) otherwise. The 1000 default
-        covers small APIs (UserAdmin: 10 rows) and gives headroom for
-        larger ones where `expected_total` isn't declared.
+        Prefer optional `expected_total` when declared for a legacy API;
+        otherwise fall back to `DEFAULT_CACHE_FETCH_SIZE` (1000). The
+        default covers small APIs and avoids guessing totals for dynamic
+        external datasets.
         """
         return getattr(self, "expected_total", None) or self.DEFAULT_CACHE_FETCH_SIZE
 
@@ -911,6 +1084,37 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
             return self.get_expected_total(paras, request)
         return getattr(self, "expected_total", None)
 
+    def _extract_response_total(self, response_data):
+        """Best-effort total extraction for real APIs without count headers.
+
+        Supported common shapes:
+        - `{"total": 208, "users": [...]}`
+        - `{"count": 208, "results": [...]}`
+        - `{"meta": {"results": {"total": 20328575}}, "results": [...]}`
+        - `{"pagination": {"total": 208}, "data": [...]}`
+        """
+        if not isinstance(response_data, dict):
+            return None
+        candidates = [
+            response_data.get("total"),
+            response_data.get("count"),
+        ]
+        meta = response_data.get("meta")
+        if isinstance(meta, dict):
+            meta_results = meta.get("results")
+            if isinstance(meta_results, dict):
+                candidates.append(meta_results.get("total"))
+            candidates.append(meta.get("total"))
+        pagination = response_data.get("pagination")
+        if isinstance(pagination, dict):
+            candidates.append(pagination.get("total"))
+        for value in candidates:
+            if isinstance(value, int):
+                return value
+            if isinstance(value, str) and value.isdigit():
+                return int(value)
+        return None
+
     @property
     def cache_backend(self) -> Optional[BaseCacheBackend]:
         """
@@ -966,6 +1170,63 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         return None
 
     def get_api_data(self, request):
+        # ModelAdmin instances are reused, so never let a previous request's
+        # X-Total-Count leak into an API response/cache path without that header.
+        if hasattr(self, "_api_filtered_total"):
+            delattr(self, "_api_filtered_total")
+
+        # A single Django admin changelist render can ask for queryset,
+        # list_display, filters, and paginator data through separate hooks.
+        # They all describe the same browser request, so only the first call
+        # should hit the external API; later calls reuse this request-local
+        # result. This intentionally does not persist across page refreshes.
+        request_cache_key = None
+        request_cache = getattr(
+            request,
+            "_django_api_factory_api_data_cache",
+            None,
+        )
+        if request_cache is None:
+            request_cache = {}
+            setattr(
+                request,
+                "_django_api_factory_api_data_cache",
+                request_cache,
+            )
+        try:
+            normalized_get = request.GET.copy()
+            try:
+                page = int(normalized_get.get("p", "1") or "1")
+            except (TypeError, ValueError):
+                page = 1
+            if page < 1:
+                page = 1
+            normalized_get["p"] = str(page)
+            normalized_get["per_page"] = str(
+                self._get_effective_per_page(request, self.list_per_page)
+            )
+            normalized_query = tuple(
+                (key, tuple(normalized_get.getlist(key)))
+                for key in sorted(normalized_get)
+            )
+            request_cache_key = (
+                self.model._meta.label_lower,
+                getattr(request, "path", ""),
+                normalized_query,
+            )
+        except AttributeError:
+            request_cache_key = None
+        if request_cache_key is not None and request_cache_key in request_cache:
+            cached_rows, cached_fields, cached_data, cached_total = (
+                request_cache[request_cache_key]
+            )
+            self.json_to_filter = list(cached_data)
+            if cached_total is not None:
+                self._api_filtered_total = cached_total
+            cached_qs = MyQuerySet(model=self.model)
+            cached_qs._result_cache = list(cached_rows)
+            return cached_qs, list(cached_fields)
+
         # QueryDict (Django 5+ MultiValueDict) returns list values from
         # `.items()` — flatten to single-value dict so downstream code
         # can treat each param as a plain string. (Django <5 returned
@@ -1075,6 +1336,9 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
                 )
                 if response.status_code == 200:
                     data = json.loads(response.content)
+                    body_total = self._extract_response_total(data)
+                    if body_total is not None:
+                        self._api_filtered_total = body_total
                     # Unwrap envelope: prefer APIModel.parse_response (4 standard
                     # shapes). Fall back to the legacy unwrap so non-APIModel
                     # models (e.g. test fixtures using plain `models.Model`)
@@ -1295,11 +1559,19 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         # the slice for the current page (URL built with `?_page=N&_limit=M`
         # in `get_api_urls`), so `mymodels_qs` is exactly that page's rows.
         # The custom `_APIPaginator.page()` returns the cache as-is, and
-        # `count` reads `expected_total`. Do NOT slice `mymodels_qs` in
+        # `count` reads X-Total-Count / optional expected_total. Do NOT
+        # slice `mymodels_qs` in
         # memory here — slicing `[N*page : N*page+N]` on a cache that only
         # has `page_size` items would zero out every page beyond the first.
         # (The old client-side slicing was removed; the `?p=` param is
         # consumed in `get_api_urls` to build the request URL.)
+        if request_cache_key is not None:
+            request_cache[request_cache_key] = (
+                list(mymodels),
+                list(fields),
+                list(data),
+                getattr(self, "_api_filtered_total", None),
+            )
         return mymodels_qs, fields
 
     def get_list_display(self, request):
