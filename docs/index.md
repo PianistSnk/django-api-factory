@@ -61,12 +61,12 @@ Two standalone projects live in the `examples/` directory:
 
 ## Project status
 
-- [x] **v0.1.0-dev0** — M0: shallow clone, works for read-only public APIs
-- [x] **M1** — refactor + concurrency fixes + cache/audit hooks
-- [x] **M2** — server-side pagination, cross-page filter, cross-page sort
-- [x] **M3** — README, tutorials, examples
-- [x] **M4** — CI, coverage, mkdocs docs site, auto-publish workflow
-- [ ] M5: PyPI v0.1.0 release (gated on user signal)
+- [x] **v0.1.0** — first PyPI-ready release.
+- [x] `APIModel` + `APIAdmin` for read-only external REST data.
+- [x] Server-side pagination, cross-page filtering, sorting, and search.
+- [x] Optional cache, export, audit-log, and modal-action hooks.
+- [x] Django view-permission integration for API-backed admin pages.
+- [x] Documentation, tutorials, examples, CI, and publish workflow.
 
 See the [design decisions](reference/design-decisions.md) for the
 full rationale on each major choice.

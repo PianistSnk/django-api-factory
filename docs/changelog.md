@@ -6,10 +6,10 @@ this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.0] - 2026-07-05
 
 ### Added
-- **`APIModel.parse_response` hook** (T1.6b) — 4 industry-standard
+- **`APIModel.parse_response` hook** — 4 industry-standard
   envelope shapes (bare list, `{data: [...]}`, `{items: [...]}`,
   `{results: [...]}`) with override path for exotic formats.
 - **4-envelope demo project** — `examples/local-mock/` has 4 admin
@@ -23,17 +23,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   builds + publishes to PyPI on tag push.
 - **mkdocs documentation site** — this site, auto-deployed to
   GitHub Pages.
+- **ElementUI-style admin filters** — optional multi-select filter
+  UI with native fallback when SimpleUI is not installed.
+- **Django permission integration** — API-backed admin pages expose
+  view permissions through Django's permission system.
 
 ### Fixed
 - `UnorderedObjectListWarning` from `Django Paginator` on every
   changelist render — silenced by `MyQuerySet.ordered = True`
   (the cache is ordered; the warning was a false positive).
+- Cross-page sorting, filtering, and page-size handling for
+  API-backed changelists.
+- Package data configuration so Django admin templates are included
+  in built wheels.
 
-## [0.1.0-dev0] - 2026-06-08
+## Pre-release work - 2026-06-08
 
 ### Added
 - Initial public release of `django-api-factory`.
 - `APIModel` abstract base + `APIAdmin` class.
-- `parse_response` (T1.6b) — added post-initial-release.
-- 4 envelope-shape demo endpoints in `spikes/big-data-mock/server.py`.
+- `parse_response` — added post-initial-release.
+- 4 envelope-shape demo endpoints in the local mock server.
 - 218 tests / 84.86% coverage.

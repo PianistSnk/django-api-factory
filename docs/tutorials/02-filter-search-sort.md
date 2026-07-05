@@ -52,8 +52,8 @@ class PostAdmin(APIAdmin):
 
 > The filter dropdowns are populated from the **entire dataset**, not
 > the current page. For 100 posts this is instant; for 100k see
-> [M2 doc](https://github.com/PianistSnk/django-api-factory#server-side-pagination--expected_total-required)
-> on `expected_total` + the `/distinct` endpoint pattern.
+> the local mock example for server-side pagination and large filter
+> menus.
 
 Reload `/admin/blog/post/` and you'll see a right-hand sidebar with
 the userId and body filters. Clicking userId=1 filters to only user 1's
@@ -169,6 +169,5 @@ In your browser, hit these URLs and verify the result:
 
 - **Tutorial 3** adds Redis caching (so the second click is
   instant), a custom Excel export action, and a Modal-form action.
-- For 100k+ datasets, see `M2_FILTER_DISTINCT_DONE.md` /
-  `M2_FILTER_CAP_DONE.md` for the server-side `/distinct`
-  pattern that the filter dropdowns use behind the scenes.
+- For 100k+ datasets, see `../examples/local-mock/README.md` for
+  server-side pagination, cross-page filtering, and large filter menus.

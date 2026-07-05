@@ -3,7 +3,7 @@
 6 admin pages: one real external API plus five local mock demos:
 
 - **BigPost** — 100k rows, server-side pagination, cross-page filter,
-  X-Total-Count paginator. The M2 performance showcase.
+  and X-Total-Count paginator integration.
 - **DummyJSONUser** — real public DummyJSON users endpoint, 200-ish
   nested records flattened into 45+ admin columns.
 - **PostBare / PostData / PostItems / PostResults** — same dataset

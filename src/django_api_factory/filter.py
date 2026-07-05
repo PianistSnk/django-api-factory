@@ -112,14 +112,13 @@ class APIFilter(AllValuesFieldListFilter):
     def _collect_choices(self, field, model_admin, request):
         """Build the distinct-values list for this filter.
 
-        The T1.6 era read from `model_admin.json_to_filter` (the
-        current API page) which limited the dropdown to that page's
-        values. The Jun 2026 cross-page filter upgrade adds
-        `model_admin.get_filter_choices(field.name, request)` so a
-        subclass can fetch the full enum (e.g. via a `/distinct`
-        endpoint) and the dropdown shows ALL distinct values across
-        the whole dataset. We fall back to the old per-page scan if
-        the new hook isn't present or raises.
+        Older implementations read from `model_admin.json_to_filter`
+        (the current API page), which limited the dropdown to that
+        page's values. `model_admin.get_filter_choices(field.name,
+        request)` lets subclasses fetch the full enum (e.g. via a
+        `/distinct` endpoint) so the dropdown shows ALL distinct values
+        across the whole dataset. We fall back to the per-page scan if
+        the hook isn't present or raises.
 
         Returns (values_list, total_count) where total_count is the
         TRUE distinct count for the idle trigger badge. If the hook

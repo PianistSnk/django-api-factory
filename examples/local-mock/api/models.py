@@ -1,7 +1,7 @@
 """Models for the local-mock example.
 
 Two data sources live here:
-- local `spikes/big-data-mock/server.py` for the **100k row** M2
+- local `examples/local-mock/mock_server.py` for the **100k row**
   performance and envelope-shape demos;
 - real DummyJSON users for a small wide external API.
 
@@ -10,7 +10,7 @@ schemas, and `APIModel.parse_response` against realistic response shapes.
 
 To start the mock server (separate terminal):
     cd /path/to/django-api-factory
-    python spikes/big-data-mock/server.py --port 8200 --rows 100000
+    python examples/local-mock/mock_server.py --port 8200 --rows 100000
 """
 
 from urllib.parse import quote
@@ -22,9 +22,10 @@ from django_api_factory.models import APIModel
 
 
 class BigPost(APIModel):
-    """100k posts from the local mock server. The M2 performance
-    showcase — server-side pagination, cross-page filter, X-Total-Count
-    paginator integration.
+    """100k posts from the local mock server.
+
+    This demonstrates server-side pagination, cross-page filters, and
+    X-Total-Count paginator integration.
 
     The mock server accepts the same `?_page=N&_limit=M` shape as
     JSONPlaceholder, AND supports `?userId=N&title=...&body=...&id=N`
@@ -50,8 +51,8 @@ class BigPost(APIModel):
         return None
 
     class Meta(APIModel.Meta):
-        verbose_name = "Big data post (M2 spike)"
-        verbose_name_plural = "Big data posts (M2 spike)"
+        verbose_name = "Big data post"
+        verbose_name_plural = "Big data posts"
 
 
 class DummyJSONUser(APIModel):
@@ -74,7 +75,7 @@ def _mock_url(path: str, page: int, page_size: int, **kwargs) -> str:
     return f"http://127.0.0.1:8200/{path}?" + "&".join(qs)
 
 
-# --- Envelope-shape demo models (Jun 2026 — APIModel.parse_response)
+# --- Envelope-shape demo models (APIModel.parse_response)
 # The local mock server exposes the same dataset under common envelope
 # shapes so we can verify APIModel.parse_response handles wrappers with
 # the default impl (no override required).

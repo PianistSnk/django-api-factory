@@ -305,6 +305,6 @@ That's the **"zero-friction internal tool"** pattern in one file.
   put nginx in front, set `DEBUG=False`, done.
 - **Multiple APIs**: register as many `APIModel` subclasses as you
   want. Each gets its own admin page; they share the same framework.
-- **100k+ datasets**: see the `M2_*_DONE.md` files for the
-  server-side `/distinct` pattern, the `filter_distinct_limit`
-  cap, and the X-Total-Count paginator integration.
+- **100k+ datasets**: see `../examples/local-mock/README.md` for
+  server-side pagination, filter option loading, and X-Total-Count
+  paginator integration.

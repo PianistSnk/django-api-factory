@@ -38,7 +38,7 @@ pip install -e .
 pip install "django>=5.0,<6.0"
 
 # 3. Start the local mock server for BigPost/envelope demos (separate terminal)
-python spikes/big-data-mock/server.py --port 8200 --rows 100000
+python examples/local-mock/mock_server.py --port 8200 --rows 100000
 
 # 4. Run this example; the DummyJSON admin page also needs internet access
 cd examples/local-mock
@@ -75,14 +75,14 @@ Open `http://127.0.0.1:8000/admin/` in your browser.
 - `api/models.py` — 6 `APIModel` subclasses (`BigPost`,
   `DummyJSONUser`, and the 4 envelope demos)
 - `api/admin.py` — 6 `APIAdmin` registrations
-- `../../spikes/big-data-mock/server.py` — the local mock server
-  (3 lines to start: `python server.py --port 8200 --rows 100000`)
+- `mock_server.py` — the local mock server
+  (start it from the repo root: `python examples/local-mock/mock_server.py --port 8200 --rows 100000`)
 
 ## See also
 
-- `M2_T2.1_MVP_DONE.md` / `M2_T2.1_F1_DONE.md` — the server-side
-  pagination work this example showcases.
-- `M2_FILTER_DISTINCT_DONE.md` / `M2_FILTER_CAP_DONE.md` — the
-  per-field distinct + cap patterns behind the filter dropdowns.
-- `d64bfeb` — the commit that added the 4 envelope demo endpoints
-  to the mock server.
+- `docs/tutorials/02-filter-search-sort.md` — filtering,
+  searching, and sorting with `APIAdmin`.
+- `docs/reference/api-response-format.md` — response envelope
+  parsing behavior.
+- `docs/reference/design-decisions.md` — pagination and
+  schema design notes.

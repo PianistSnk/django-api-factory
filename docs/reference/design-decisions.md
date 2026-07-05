@@ -27,7 +27,8 @@ We deliberately do not invent a 5th canonical key (`payload`,
 `rows`, `list`) — the four we support cover the formats used by
 jsonplaceholder, GitHub, Stripe, Google Cloud, and the DRF ecosystem.
 
-See `M1_T1.6b_DONE.md` for the full decision log.
+The implementation keeps the common path simple while still exposing
+`parse_response` for unusual APIs.
 
 ## 2. Why `managed = False` + `abstract = True` on `APIModel`
 
@@ -66,11 +67,12 @@ always hit after the first request anyway.
 
 ## 4. Why server-side pagination is mandatory for 100k+ datasets
 
-`expected_total = N` is **required** when your API supports
-`?page=N&page_size=M`. Without it, the paginator can't render the
-right number of page links, and `?p=越界` raises 500.
+When the upstream API returns a total count, the paginator can render
+the right number of page links without fetching the whole dataset.
+If your API cannot return a total, you can still render the current
+page, but exact page counts are unavailable.
 
-The performance numbers (from the M2 spike):
+The performance numbers from the large-dataset benchmark:
 
 | Dataset size | Without server-side pagination | With server-side pagination |
 |---|---|---|
@@ -80,7 +82,6 @@ The performance numbers (from the M2 spike):
 | 1M rows      | crashes / OOM                   | 1s / 67KB                    |
 
 Server-side pagination is **not** a nice-to-have for 10k+ rows.
-See `M2_T2.1_MVP_DONE.md` and `M2_T2.1_F1_DONE.md`.
 
 ## 5. Why caching is opt-in, not auto-detected
 
@@ -98,8 +99,8 @@ Alternatives considered:
 - **Required `cache()` implementation**: rejected because 90% of
   users don't need caching, and forcing them to write `def cache(...): return None` is busywork.
 
-The opt-in is intentional. See `M1_T1.2_DONE.md` for the
-rationale.
+The opt-in is intentional: cache ownership belongs to the host
+project.
 
 ## 6. Why `MyQuerySet.ordered = True` (silence UnorderedObjectListWarning)
 
@@ -122,5 +123,5 @@ or set `ordered = False` explicitly on your subclass.
 
 - [API response format](api-response-format.md) — the envelope
   unwrap rationale in more detail.
-- `M1_*_DONE.md` and `M2_*_DONE.md` in the repo root for
-  milestone-level decision logs.
+- [Local mock example](../examples/local-mock/README.md) — large
+  dataset pagination and filter behavior.

@@ -1,10 +1,10 @@
-"""M2 large-dataset spike — Mock REST server.
+"""Local mock REST server for the example project.
 
 Mimics JSONPlaceholder shape (id / userId / title / body) so the same
 APIAdmin code path works. Supports `?_page=N&_limit=M` pagination.
 
 Usage:
-    python spikes/big-data-mock/server.py --port 8200 --rows 100000
+    python examples/local-mock/mock_server.py --port 8200 --rows 100000
     curl 'http://127.0.0.1:8200/posts?_page=1&_limit=10'
 """
 
@@ -15,7 +15,7 @@ import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-# Fixed seed → identical data across runs (good for benchmarking)
+# Fixed seed gives identical data across runs, which helps benchmarking.
 random.seed(42)
 
 # Pre-built dataset — built once at startup, served from memory.
@@ -33,12 +33,8 @@ TITLE_TEMPLATES = [
     "dolorem dolore est ipsam",
     "nesciunt iure omnis quia",
     "optio molestias id quia eum",
-    # Jun 2026 expansion: 10 -> 30 templates. With 10 templates and
-    # 100k rows, each template repeats 10_000 times. After sort-by-title
-    # with per_page=10000, the user only saw ONE template's worth of
-    # rows (visually looked like sort "didn't work" — every row had the
-    # same title prefix). 30 templates -> ~3_333 each in 100k, so
-    # per_page=10000 shows ~3 distinct template groups.
+    # Keep enough templates that sorted pages show multiple visible groups
+    # even when each page contains many rows.
     "adipisci velit sed magnam",
     "alias voluptas aliquam doloribus",
     "asperiores ea ipsam voluptatem",
@@ -74,7 +70,7 @@ BODY_TEMPLATES = [
     "voluptatem repellat sit provident aperiam voluptatem",
     "rerum voluptatem consequatur ut facere",
     "architecto et voluptas sint sit amet nemo aut consequuntur",
-    # Jun 2026 expansion: 10 -> 30 (see TITLE_TEMPLATES comment)
+    # Keep this aligned with TITLE_TEMPLATES for visual variety.
     "blanditiis deserunt dolore doloremque doloribus ea eaque eius eligendi",
     "enim error esse est et eum expedita explicabo facilis",
     "fugiat harum hic id illo impedit in incidunt ipsa iste",
@@ -282,7 +278,7 @@ class MockHandler(BaseHTTPRequestHandler):
     """GET /posts?_page=N&_limit=M → JSON list of posts."""
 
     def log_message(self, fmt, *args):
-        # Spike-mode: log every GET with response size + handler time
+        # Log every GET with response size + handler time.
         import time
         if not hasattr(self, "_t0"):
             self._t0 = time.perf_counter()
@@ -291,8 +287,8 @@ class MockHandler(BaseHTTPRequestHandler):
         sys.stderr.flush()
 
     def do_GET(self):
-        # Envelope-shape endpoints (Jun 2026 — APIModel.parse_response
-        # supports 4 industry-standard shapes). Hit each one with a
+        # Envelope-shape endpoints. APIModel.parse_response supports
+        # 4 industry-standard shapes. Hit each one with a
         # matching admin class to verify the unwrap hook handles all
         # four correctly. Same data as /posts, different envelope.
         # 4 alias paths, each returning a different envelope shape:
@@ -330,8 +326,8 @@ class MockHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
-        # /distinct?field=X[&limit=N&offset=M] (Jun 2026 filter-distinct,
-        # capped). Returns distinct values for a field across the entire
+        # /distinct?field=X[&limit=N&offset=M]. Returns distinct values
+        # for a field across the entire
         # dataset, optionally paginated. Without this, ?userId= dropdown
         # on 100k rows / 200 per page only shows 200 userIds, not the
         # real 10_000. With limit=N, the response stays small (N values)
@@ -350,8 +346,7 @@ class MockHandler(BaseHTTPRequestHandler):
                 return
             limit = int((qs.get("limit") or [None])[0] or 0)
             offset = int((qs.get("offset") or [None])[0] or 0)
-            # Server-side search (Jun 2026 cross-page filter add-on):
-            # when `?q=foo` is provided, narrow the distinct set to
+            # Server-side search: when `?q=foo` is provided, narrow the distinct set to
             # values whose string form contains `foo` (case-insensitive
             # substring). The admin's search box debounces and AJAXes
             # here so the user can find values that aren't in the
@@ -436,7 +431,7 @@ class MockHandler(BaseHTTPRequestHandler):
         page = int(_first("page", _first("_page", "1")))
         limit = int(_first("page_size", _first("_limit", "10")))
 
-        # Server-side filter (Jun 2026 cross-page filter). Each filter
+        # Server-side filter. Each filter
         # param narrows the dataset BEFORE pagination so the API
         # returns only matching rows. Multi-value params (e.g. body=A&body=B)
         # are OR-joined. The returned X-Total-Count reflects the
@@ -471,7 +466,7 @@ class MockHandler(BaseHTTPRequestHandler):
             ids = set(id_filters)
             filtered = [p for p in filtered if p["id"] in ids]
 
-        # Server-side search (Jun 2026 cross-page q): substring match
+        # Server-side search: substring match
         # across title + body (and id/userId as strings for convenience).
         # Without this, the framework's client-side search only sees the
         # current 50 rows of page 1 — searching for a long unique string
@@ -493,7 +488,7 @@ class MockHandler(BaseHTTPRequestHandler):
                 )
             filtered = [p for p in filtered if _matches(p)]
 
-        # Server-side sort (Jun 2026 cross-page sort): apply AFTER
+        # Server-side sort: apply AFTER
         # filter and BEFORE pagination so the slice_ is in the right
         # order. Without this, the admin client-side sorts the current
         # 50 rows but page 1 sort + page 2 sort is meaningless (rows

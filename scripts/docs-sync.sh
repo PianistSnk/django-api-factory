@@ -9,8 +9,8 @@
 # Run this before `mkdocs build` (or just commit if you've already
 # changed `examples/*/README.md` and the docs build is local).
 #
-# The .gitignore excludes docs/examples/ so this doesn't show up as
-# untracked noise.
+# docs/examples/ is tracked so the documentation site can build from a
+# clean checkout without running this script first.
 
 set -euo pipefail
 

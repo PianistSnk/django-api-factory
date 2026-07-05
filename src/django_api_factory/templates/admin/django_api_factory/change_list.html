@@ -354,11 +354,11 @@
     document.addEventListener('input', function (e) {
       var input = e.target;
       if (!input.classList || !input.classList.contains('filter-inline-search')) return;
-      // Debounced server-side search (Jun 2026): when the user types,
+      // Debounced server-side search: when the user types,
       // wait 250ms then AJAX `/admin/.../?ajax_distinct=1&field=X&q=...`
       // to get values that match the search term across the WHOLE
       // dataset, not just the initial 200 rendered. Replaces the
-      // dropdown contents (the legacy client-side hide/show is
+      // dropdown contents (the client-side hide/show fallback is
       // preserved as instant feedback for the 200 already loaded).
       clearTimeout(window.__filterSearchDebounce);
       var q = input.value.trim();

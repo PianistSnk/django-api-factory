@@ -65,7 +65,7 @@ class AuditLogMixin:
         """
         Called when your custom view proxies a file download from the
         external API. (Note: this library used to ship a `view_or_download`
-        helper, but it was removed in M1 — implement the proxy in your
+        helper; implement the proxy in your
         own project and call `self.log_download(...)` there.)
         Default: no-op. Override to record download audit.
         """
@@ -135,8 +135,8 @@ class ExportMixin:
         return response
 
 
-# Re-export to preserve the historical `from .admin import quote` import in
-# the original code. New code should `from urllib.parse import quote` directly.
+# Re-export to preserve the historical `from .admin import quote` import.
+# New code should `from urllib.parse import quote` directly.
 from urllib.parse import quote  # noqa: E402, F401
 
 import logging
@@ -146,7 +146,7 @@ from django.urls import path
 logger = logging.getLogger(__name__)
 
 
-# --- Schema registry (T1.3 + T1.4 — register fields once, lock-safe) -----
+# --- Schema registry (register fields once, lock-safe) -------------------
 
 import threading as _threading
 
@@ -156,9 +156,9 @@ class SchemaRegistry:
     Track which fields have already been registered on which model classes.
 
     Solves two problems simultaneously:
-    1. (T1.3) Avoid re-running `model.add_to_class(...)` for every request —
+    1. Avoid re-running `model.add_to_class(...)` for every request —
        the field list is registered **once** per model+fields combo.
-    2. (T1.4) Make concurrent registration safe across threads / workers —
+    2. Make concurrent registration safe across threads / workers —
        a module-level `threading.Lock` serializes `add_to_class` calls.
 
     Usage (from APIAdmin.get_api_data)::
@@ -216,7 +216,7 @@ class SchemaRegistry:
 schema_registry = SchemaRegistry()
 
 
-# --- Cache backend abstraction (T1.2 Redis-decoupling) -------------------
+# --- Cache backend abstraction -------------------------------------------
 
 class BaseCacheBackend:
     """
@@ -409,7 +409,7 @@ class ActionFormMixin:
             if isinstance(layer, dict)
             else description
         )
-        # simpleui-style layer extras (T1.5 simpleui compatibility):
+        # simpleui-style layer extras:
         # - width: any CSS value (e.g. "40%", "500px") for the modal width
         # - icon, type, style: cosmetic on the action button itself
         width = layer.get("width") if isinstance(layer, dict) else None

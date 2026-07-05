@@ -44,10 +44,9 @@ def convert(value):
 def _handle_search_condition(item_value, search_terms, sep):
     """Decide whether one row matches one filter param's value.
 
-    Extracted as a module-level function (Jun 2026 fix for the BigPost-100k
-    filter bug) so it's directly unit-testable without spinning up a fake
-    admin + network mock. Used by `APIAdmin.get_api_data` and mirrored by
-    `APIFilter.choices` in filter.py.
+    Extracted as a module-level function so it's directly unit-testable
+    without spinning up a fake admin + network mock. Used by
+    `APIAdmin.get_api_data` and mirrored by `APIFilter.choices` in filter.py.
 
     Semantics:
       - Single term, no `sep` in term: EXACT equality (int-coerced if both
@@ -179,7 +178,7 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         Resolve `object_id` for the detail view.
 
         Tries in order:
-        1. Detail cache (T1.5) — fast for the current page's id
+        1. Detail cache — fast for the current page's id
         2. **Page-iteration fallback** — for server-side pagination, when
            `object_id` came from a different page (the detail URL has no
            `?p=N` so we don't know which page it was on). Walk pages
@@ -308,8 +307,8 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         changelist caching. Same scheme as detail but with a `changelist:`
         prefix so the two caches don't collide if both are enabled.
 
-        T2.1 (F4): with server-side pagination, each page is a SEPARATE
-        API call, so the cache key INCLUDES `p` and `per_page`. Same
+        With server-side pagination, each page is a separate API call,
+        so the cache key INCLUDES `p` and `per_page`. Same
         page / same per_page / same sort / same filters / same user =
         cache hit. Different page = cache miss = fresh API call (which
         is cheap, ~30ms for a 50-row page).
@@ -436,7 +435,7 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
 
     def _ajax_distinct(self, request):
         """JSON endpoint for the filter UI to fetch more distinct
-        values on demand. Generic (Jun 2026): calls the admin's
+        values on demand. Calls the admin's
         `get_filter_choices(field, request, q, offset, limit)`
         hook and serializes the result. The hook decides HOW to
         implement distinct retrieval:
@@ -493,7 +492,7 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
             if api not in excluded
         )
 
-    # --- Filter distinct values (Jun 2026 cross-page filter) -----------
+    # --- Filter distinct values ----------------------------------------
     #
     # The legacy `json_to_filter` only had the current API page's
     # values, so the filter dropdown showed "userId (200)" instead of
@@ -542,7 +541,7 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         search + paginated), or None to fall back to per-page
         legacy.
 
-        Signature (Jun 2026 generalization):
+        Signature:
             field_name: which API field to compute distinct for
             request: the active request (for cache namespace + auth)
             q: server-side search term (substring match, case-
@@ -558,7 +557,7 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
                     matching (post-q) total, `truncated` is True
                     if more values exist past `offset+limit`.
 
-        Default impl (Jun 2026): for SMALL datasets (under
+        Default implementation: for SMALL datasets (under
         `filter_distinct_max_rows` AND/OR `expected_total`), fetch
         all pages once via `get_api_data`, aggregate, cache, and
         serve search/offset/limit from the cache. For LARGE
@@ -598,7 +597,7 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         self._set_filter_distinct_cache(field_name, request, full)
         return self._slice_distinct_payload(full, q, offset, limit)
 
-    # --- Default get_filter_choices helpers (Jun 2026) -------------------
+    # --- Default get_filter_choices helpers -----------------------------
 
     def get_filter_distinct_url(self, field_name, request, q="", offset=0, limit=None):
         """Build the server-side distinct URL, or return None.
@@ -728,9 +727,7 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         """Redis key for the shared per-admin raw rows cache. All
         distinct lookups within the same admin + max_rows window
         share this cache, so N list_filter fields on one admin → 1
-        network walk instead of N. Jun 2026 fix for the per-field
-        71-second trap (PostAdmin 3 fields × 12 jsonplaceholder
-        pages × cross-Pacific RTT)."""
+        network walk instead of N."""
         import hashlib
         h = hashlib.md5(str(max_rows).encode("utf-8")).hexdigest()[:12]
         # Defensive: tests use APIAdmin.__new__ to skip __init__,
@@ -751,10 +748,8 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         (whichever is smaller). Returns list of dicts, or None on
         fetch failure.
 
-        Jun 2026 rewrite: previous `_fetch_all_distinct_values`
-        walked pages per-field, which made PostAdmin (3 fields ×
-        12 pages × cross-Pacific jsonplaceholder) take 71 seconds
-        on first load. Now N fields share one walk.
+        Previous implementations walked pages per field. Now N fields
+        share one walk.
         """
         cache_key = self._raw_rows_cache_key(max_rows)
         memory_cache = getattr(self, "_filter_raw_rows_memory_cache", {})
@@ -845,10 +840,8 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         shared raw-rows walk. Bounded by `max_rows` rows total and
         `expected_total` (whichever is smaller).
 
-        Jun 2026: delegates to `_fetch_all_raw_rows` so multiple
-        list_filter fields share one network walk (no more 71s on
-        PostAdmin first load — see `_fetch_all_raw_rows` for the
-        before/after story).
+        Delegates to `_fetch_all_raw_rows` so multiple list_filter fields
+        share one network walk.
         """
         raw_rows = self._fetch_all_raw_rows(request, max_rows)
         if not raw_rows:
@@ -950,8 +943,8 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         allow_empty_first_page=True,
     ):
         """
-        M2 (T2.1 MVP): return a Paginator that asks the API for the
-        current page on each `page(N)` call (server-side pagination).
+        Return a Paginator that asks the API for the current page on
+        each `page(N)` call (server-side pagination).
 
         Standard Django Paginator assumes `object_list` contains ALL
         rows and slices it per page. For server-side pagination, we
@@ -984,8 +977,8 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
             def page(self, number):
                 number = self.validate_number(number)
                 if self._request is not None and self._admin is not None:
-                    # T2.1 MVP: ask the API for just this page rather
-                    # than slicing the cache. Clone the request and force
+                    # Ask the API for just this page rather than slicing
+                    # the cache. Clone the request and force
                     # `?p=number` because ChangeList may clamp an out-of-range
                     # page after filters shrink the result set.
                     from copy import copy
@@ -1008,7 +1001,7 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
                 top = bottom + self.per_page
                 return self._get_page(items[bottom:top], number, self)
 
-        # Total row count for the paginator. Priority (Jun 2026):
+        # Total row count for the paginator. Priority:
         # 1. `self._api_filtered_total` — set by `get_api_data` from the
         #    API's X-Total-Count header. Reflects the FILTERED dataset
         #    size (e.g. ?userId=1 on 100k → total=10), so the paginator
@@ -1049,8 +1042,8 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
 
     def get_api_urls(self, paras, request):
         """Build the external API URL for the current changelist request."""
-        # T2.1 MVP: server-side pagination. Pass `?page=N&page_size=M`
-        # to the API; the API returns just that page. Django admin's
+        # Server-side pagination. Pass `?page=N&page_size=M` to the API;
+        # the API returns just that page. Django admin's
         # `?p=N` becomes a real API call, not a cache slice.
         #
         # We also keep client-side `p`/`per_page` out of the forwarded
@@ -1176,9 +1169,10 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
 
     def _resolve_expected_total(self, paras, request):
         """
-        M2 (T2.2): figure out the total row count for server-side pagination.
-        Returns the class attr (kept for backwards compat with subclasses
-        that override `get_expected_total`).
+        Resolve the total row count for server-side pagination.
+
+        Returns the class attr, kept for backwards compatibility with
+        subclasses that override `get_expected_total`.
         """
         if hasattr(self, "get_expected_total"):
             return self.get_expected_total(paras, request)
@@ -1344,8 +1338,7 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         # skipped the col-idx → field-ref conversion on action-less
         # admins (BigPostAdmin, CoinAdmin). The in-memory sort still
         # worked (no-op pass for unknown idx), but server-side sort
-        # translation (added Jun 2026 for cross-page ordering) read
-        # the un-converted idx and went to the wrong field. Moved
+        # translation read the un-converted idx and went to the wrong field. Moved
         # out of the actions gate so the conversion is unconditional.
         for i in order_list:
             try:
@@ -1376,13 +1369,12 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
                 tmp_order_list.append("-" + str(-(n + 1)))
             order_list = tmp_order_list
 
-        # Server-side sort (Jun 2026 cross-page sort): translate the
-        # FIRST sort key from Django admin's `?o=N` (UI column idx) to
-        # the API's `?_sort=<field>&_order=<asc|desc>` convention. This
+        # Server-side sort: translate the first sort key from Django
+        # admin's `?o=N` (UI column idx) to the API's
+        # `?_sort=<field>&_order=<asc|desc>` convention. This
         # way the API returns rows in sort order across all pages,
-        # not just the current 50 rows. JSONPlaceholder / mock server
-        # both honor `?_sort` / `?_order` (mock server: see
-        # spikes/big-data-mock/server.py).
+        # not just the current page. JSONPlaceholder and the local
+        # mock server both honor `?_sort` / `?_order`.
         #
         # We translate only the first sort key (single-column sort,
         # the common case). Multi-column sort (`?o=1.0,2.0`) falls
@@ -1412,8 +1404,8 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
                 paras["_sort"] = sort_field
                 paras["_order"] = sort_dir
 
-        # Short-term cache lookup (T1.5b opt-in): catches "I clicked twice
-        # within 5 minutes" repeat requests. Opt-in via
+        # Short-term cache lookup: catches "I clicked twice within
+        # 5 minutes" repeat requests. Opt-in via
         # `changelist_cache_enabled = True` on the admin class. Default off.
         short_cache_data = None
         if (
@@ -1429,7 +1421,7 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
                 except (ValueError, UnicodeDecodeError):
                     short_cache_data = None
 
-        # Cache lookup (legacy T1.2 cache)
+        # Cache lookup via the pluggable cache backend.
         if short_cache_data is not None:
             data = short_cache_data
         else:
@@ -1461,8 +1453,8 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
                     elif isinstance(data, dict) and "data" in data:
                         data = data["data"].get("items", [])
                     self.json_to_filter = data
-                    # X-Total-Count (Jun 2026 cross-page filter): real APIs
-                    # like JSONPlaceholder return this header. When the API
+                    # X-Total-Count: real APIs like JSONPlaceholder return
+                    # this header. When the API
                     # server-side filters (e.g. ?userId=1), the total in
                     # the header is the FILTERED size, which the paginator
                     # needs to render the right number of pages. Store on
@@ -1557,9 +1549,9 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
 
         # Dynamically add fields to the model class
         # Register fields on the model class via the module-level
-        # SchemaRegistry (T1.3). The registry is idempotent and thread-safe
-        # — first request adds the fields, all subsequent requests skip
-        # the add_to_class loop entirely.
+        # SchemaRegistry is idempotent and thread-safe: first request
+        # adds the fields, all subsequent requests skip the add_to_class
+        # loop entirely.
         schema_registry.register(self.model, fields)
         for field_name in self.paras_list:
             if (
@@ -1599,8 +1591,8 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         reserved |= {
             "_changelist_filters",  # detail-back-link state preservation
             "_selected_action",      # action-form checkboxes
-            "_sort",                # server-side sort field (Jun 2026)
-            "_order",               # server-side sort direction (Jun 2026)
+            "_sort",                # server-side sort field
+            "_order",               # server-side sort direction
             "sort",                 # alternate server-side sort field name
             "order",                # alternate server-side sort direction
         }
@@ -1651,12 +1643,12 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         mymodels_qs = MyQuerySet(model=self.model)
         mymodels_qs._result_cache = mymodels
 
-        # The original code used action_flag=4 to audit changelist queries. That is a
+        # Some projects use action_flag=4 to audit changelist queries. That is a
         # business-specific assumption and is no longer hardcoded here —
         # subclasses can override `log_query` to record their own audit.
         self.log_query(request, self.model.__name__)
 
-        # Cache raw API data via the pluggable cache backend (T1.5) so that
+        # Cache raw API data via the pluggable cache backend so that
         # `get_object` (detail view) can resolve `object_id` without a
         # fresh API call. This avoids stale-data risk: when the API changes,
         # the user reloads the changelist and the cache is overwritten.
@@ -1682,7 +1674,7 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
                 json.dumps(data).encode("utf-8"),
                 self.changelist_cache_ttl,
             )
-        # M2 (T2.1): server-side pagination. The API has already returned
+        # Server-side pagination: the API has already returned
         # the slice for the current page (URL built with `?_page=N&_limit=M`
         # in `get_api_urls`), so `mymodels_qs` is exactly that page's rows.
         # The custom `_APIPaginator.page()` returns the cache as-is, and

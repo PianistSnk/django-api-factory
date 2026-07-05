@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "django-api-factory"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "Display external REST API data in Django admin as if it were a managed model."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -48,9 +48,12 @@ simpleui = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+django_api_factory = ["templates/admin/django_api_factory/*.html"]
+
 [tool.ruff.lint]
 # mixins.py intentionally organizes imports into mid-file sections
-# (T1.3 + T1.4 schema registry code, T1.5 Redis cache backend, etc.)
+# (schema registry code, Redis cache backend, etc.)
 # which ruff flags as E402. The imports are real, just positioned
 # after section comments. Suppress E402 for that file only.
 per-file-ignores = { "src/django_api_factory/mixins.py" = ["E402"] }

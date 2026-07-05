@@ -12,12 +12,11 @@ Step-by-step guides for getting the most out of `django-api-factory`.
 
 ## After the tutorials
 
-- **Multiple examples**: see the `example/` directory in the repo root
-  — it has 4 admin registrations covering JSONPlaceholder (public
-  mock API), the local 100k-row mock server (`spikes/big-data-mock/`),
-  and 4 envelope-shape demos (`postbare` / `postdata` / `postitems` /
-  `postresults`).
-- **Architecture deep-dive**: see `WALKTHROUGH.md` (中文讲解) or
-  `docs/` (English, future work).
+- **Multiple examples**: see the `examples/` directory in the repo root
+  for JSONPlaceholder, a local 100k-row mock server, a real wide API,
+  and 4 response-envelope demos (`postbare` / `postdata` / `postitems`
+  / `postresults`).
+- **Architecture notes**: see `../reference/design-decisions.md`.
 - **API reference**: see `README.md` § 7 for the `APIModel.parse_response`
-  envelope hook, and `M1_*_DONE.md` for design decisions.
+  envelope hook, and `../reference/api-response-format.md` for response
+  parsing behavior.

@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/PianistSnk/django-api-factory/actions/workflows/ci.yml/badge.svg)](https://github.com/PianistSnk/django-api-factory/actions)
 [![Coverage](https://img.shields.io/badge/coverage-80.19%25-brightgreen.svg)](#testing)
-[![PyPI](https://img.shields.io/badge/pypi-v0.1.0--dev0-orange.svg)](#install)
+[![PyPI](https://img.shields.io/badge/pypi-v0.1.0-blue.svg)](#install)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 [English](README.md) | [中文](README.zh-CN.md)
@@ -63,15 +63,9 @@ python manage.py runserver
 # Option B: local-mock (100k rows + 4 envelope shapes, needs the mock server)
 cd ../..   # back to the repo root
 pip install -e .
-python spikes/big-data-mock/server.py --port 8200 --rows 100000 &
+python examples/local-mock/mock_server.py --port 8200 --rows 100000 &
 cd examples/local-mock
 python manage.py migrate
-python manage.py createsuperuser
-python manage.py runserver
-```
-
-Or for a **combined demo of all 5 admins in one project** (the legacy
-`example/` at the repo root), see `example/README.md`.
 python manage.py createsuperuser
 python manage.py runserver
 ```
@@ -93,7 +87,7 @@ class PostAdmin(APIAdmin):
 
 ### 2. Query / download audit log
 
-The original code wrote to `django.contrib.admin.models.LogEntry` with custom `action_flag=4` (query) and `action_flag=6` (download). The library no longer writes any audit by default — subclass `AuditLogMixin` to add your own:
+Some projects write to `django.contrib.admin.models.LogEntry` with custom `action_flag=4` (query) and `action_flag=6` (download). The library does not write any audit by default — subclass `AuditLogMixin` to add your own:
 
 ```python
 from django_api_factory.admin import APIAdmin
@@ -122,7 +116,7 @@ class MyAuditedAdmin(AuditLogMixin, APIAdmin):
         )
 ```
 
-Note: as of M1, the library no longer ships a built-in `view_or_download` helper — implement the file proxy in your own project and call `self.log_download(...)` from there.
+Note: the library does not ship a built-in `view_or_download` helper — implement the file proxy in your own project and call `self.log_download(...)` from there.
 
 ### 3. Modal-form actions (`ActionFormMixin`)
 
@@ -205,8 +199,8 @@ class DjangoCacheBackend(BaseCacheBackend):
 The `get_api_data` flow adds API-returned fields to the model class via `add_to_class(...)` so Django admin can render them. Without a registry, this `O(N)` loop runs on every request and is vulnerable to multi-thread races.
 
 `django-api-factory` provides a module-level `schema_registry` (singleton) that:
-1. Skips already-registered fields (T1.3) — first request registers, all subsequent requests are O(1) lookups
-2. Serializes registration with a `threading.Lock` (T1.4) — safe under multi-thread WSGI servers
+1. Skips already-registered fields — first request registers, all subsequent requests are O(1) lookups
+2. Serializes registration with a `threading.Lock` — safe under multi-thread WSGI servers
 
 ```python
 from django_api_factory.mixins import schema_registry
@@ -298,19 +292,14 @@ need this hook at all.
 
 ## Status
 
-- [x] **v0.1.0-dev0** — M0: shallow clone, works for read-only public APIs
-- [x] **M1 T1.1** — strip project-specific business coupling (audit log hooks + configurable multi-value separator + `ActionFormMixin` modal-form)
-- [x] **M1 T1.2** — Redis cache backend pluggable (Null/Redis/custom)
-- [x] **M1 T1.3** — `SchemaRegistry` registers fields once (idempotent, intra-process thread-safe)
-- [x] **M1 T1.4** — `threading.Lock` in SchemaRegistry prevents concurrent `add_to_class` races
-- [x] **M1 T1.5** — `ActionFormMixin` modal-form + `changelist_cache_enabled` opt-in (default off) + `detail_cache_enabled` opt-in (default off)
-- [x] **M1 T1.6** — rewrite test suite (88 tests, 72% coverage, pytest-cov, HTML report, `--cov-fail-under=70`)
-- [x] **M1 T1.6b** — `APIModel.parse_response` hook: 4 industry-standard envelope shapes + override path (212 tests, 80% coverage)
-- [ ] M2: server-side pagination, streaming, lazy
-- [ ] M3: docs, tutorials, examples
-- [ ] M4: CI, PyPI release
+- [x] **v0.1.0** — first PyPI-ready release.
+- [x] `APIModel` + `APIAdmin` for read-only external REST data.
+- [x] Server-side pagination, cross-page filtering, sorting, and search.
+- [x] Optional cache, export, audit-log, and modal-action hooks.
+- [x] Django view-permission integration for API-backed admin pages.
+- [x] Documentation, tutorials, examples, CI, and publish workflow.
 
-See `M1_T1.1_SCOPE.md` for the M1 breakdown.
+See `docs/tutorials/` for step-by-step usage guides.
 
 ## Testing
 

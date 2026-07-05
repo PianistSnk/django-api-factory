@@ -6,7 +6,7 @@ Same minimal config as examples/jsonplaceholder, with one addition:
 
 The mock server must be running separately:
     cd /path/to/django-api-factory
-    python spikes/big-data-mock/server.py --port 8200 --rows 100000
+    python examples/local-mock/mock_server.py --port 8200 --rows 100000
 """
 
 import os

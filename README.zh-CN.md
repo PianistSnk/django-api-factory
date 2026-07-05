@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/PianistSnk/django-api-factory/actions/workflows/ci.yml/badge.svg)](https://github.com/PianistSnk/django-api-factory/actions)
 [![Coverage](https://img.shields.io/badge/coverage-80.19%25-brightgreen.svg)](#testing)
-[![PyPI](https://img.shields.io/badge/pypi-v0.1.0--dev0-orange.svg)](#install)
+[![PyPI](https://img.shields.io/badge/pypi-v0.1.0-blue.svg)](#install)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 [English](README.md) | [中文](README.zh-CN.md)
@@ -61,14 +61,12 @@ python manage.py runserver
 # 选 B:local-mock(100k 行 + 4 种 envelope,需先起 mock server)
 cd ../..   # 回仓库根
 pip install -e .
-python spikes/big-data-mock/server.py --port 8200 --rows 100000 &
+python examples/local-mock/mock_server.py --port 8200 --rows 100000 &
 cd examples/local-mock
 python manage.py migrate
 python manage.py createsuperuser
 python manage.py runserver
 ```
-
-或要看**一个项目里 5 个 admin 全跑**(传统 `example/`,仓库根),看 `example/README.md`。
 
 浏览器打开 `http://127.0.0.1:8000/admin/` 看效果。
 
@@ -182,17 +180,12 @@ class LegacyOrder(APIModel):
 
 ## 状态
 
-- [x] **v0.1.0-dev0** — M0: 浅克隆 demo,只读公共 API 可用
-- [x] **M1 T1.1** — 剥离项目特定业务耦合(审计日志钩子 + 可配置多值分隔符 + `ActionFormMixin` 模态表单)
-- [x] **M1 T1.2** — Redis 缓存后端可插拔(Null/Redis/自定义)
-- [x] **M1 T1.3** — `SchemaRegistry` 一次性注册字段(idempotent,进程内线程安全)
-- [x] **M1 T1.4** — `SchemaRegistry` 加 `threading.Lock`,防并发 `add_to_class` 竞态
-- [x] **M1 T1.5** — `ActionFormMixin` 模态表单 + `changelist_cache_enabled` opt-in(默认关) + `detail_cache_enabled` opt-in(默认关)
-- [x] **M1 T1.6** — 重写测试套件(88 tests,72% 覆盖,pytest-cov,HTML 报告,`--cov-fail-under=70`)
-- [x] **M1 T1.6b** — `APIModel.parse_response` 钩子:4 种业界 envelope + override 路径(212 tests,80% 覆盖)
-- [ ] M2: 服务端分页、流式、惰性
-- [ ] M3: 文档、教程、示例
-- [ ] M4: CI、PyPI 发布
+- [x] **v0.1.0** — 第一个 PyPI 发布版。
+- [x] `APIModel` + `APIAdmin` 支持只读外部 REST 数据。
+- [x] 服务端分页、跨页筛选、排序、搜索。
+- [x] 可选缓存、导出、审计日志、弹窗 action 钩子。
+- [x] 接入 Django view 权限体系。
+- [x] 文档、教程、示例、CI、发布 workflow。
 
 ## 测试
 

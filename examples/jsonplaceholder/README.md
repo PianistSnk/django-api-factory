@@ -54,6 +54,5 @@ Open `http://127.0.0.1:8000/admin/blog/post/` in your browser.
 ## Next step
 
 For a more involved example with **100k rows**, server-side
-pagination, multiple envelope shapes, and the full M2
-performance/perf work, see
+pagination, multiple envelope shapes, and large-dataset behavior, see
 [`../local-mock/`](../local-mock/).

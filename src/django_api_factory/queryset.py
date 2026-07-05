@@ -16,7 +16,7 @@ class MyQuerySet(QuerySet):
     handled separately by APIAdmin.get_paginator, which returns a custom
     Paginator subclass that knows the total via a class attribute.
 
-    `ordered` is forced to True (Jun 2026 fix for UnorderedObjectListWarning):
+    `ordered` is forced to True to avoid `UnorderedObjectListWarning`:
     - APIAdmin.get_api_data sorts `_result_cache` by the API's row order
       (id-asc by default for server-side pagination; user-driven `?o=`
       parse for client-side). The cache IS ordered, so the warning is a
@@ -31,7 +31,6 @@ class MyQuerySet(QuerySet):
     # (server-side pagination is id-asc by default; user-driven ?o= is
     # applied client-side). Report ordered=True so Django Paginator's
     # `UnorderedObjectListWarning` doesn't fire on every changelist render.
-    # Jun 2026 fix — false positive was masking real warnings in logs.
     ordered = True
 
     def __getstate__(self):
