@@ -1,8 +1,8 @@
 # django-api-factory
 
 [![CI](https://github.com/PianistSnk/django-api-factory/actions/workflows/ci.yml/badge.svg)](https://github.com/PianistSnk/django-api-factory/actions)
-[![Coverage](https://img.shields.io/badge/coverage-85.90%25-brightgreen.svg)](#testing)
-[![Release](https://img.shields.io/badge/release-v0.1.0-blue.svg)](#install)
+[![Coverage](https://img.shields.io/badge/coverage-85.95%25-brightgreen.svg)](#testing)
+[![Release](https://img.shields.io/badge/release-v0.1.1-blue.svg)](#install)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 [English](README.md) | [中文](README.zh-CN.md)
@@ -36,7 +36,7 @@ from django_api_factory.admin import APIAdmin
 
 @admin.register(Post)
 class PostAdmin(APIAdmin):
-    pass
+    list_display = ["id", "userId", "title"]
 ```
 
 跑 `python manage.py runserver`,登录,打开这个模型的 Django admin changelist。
@@ -84,7 +84,24 @@ python manage.py runserver
 
 多数项目可以从 `url` + `APIAdmin` 开始。下面这些钩子用于处理上游 API 或宿主项目的特殊需求。
 
-### 1. 多值字段分隔符
+### 1. 列和字段顺序
+
+用 Django 原生 `list_display` 控制要显示的 API 字段和顺序。不设置时会自动显示 API 字段,但会排除 `api_exclude_fields`。
+默认 `api_exclude_fields = ["id"]`,因为 `__str__` 已经作为详情链接显示这一行。
+
+```python
+class PostAdmin(APIAdmin):
+    list_display = ["id", "userId", "title"]
+```
+
+如果用自动列,在 admin 类上排除噪音字段:
+
+```python
+class UserAdmin(APIAdmin):
+    api_exclude_fields = ["id", "password", "ssn", "image"]
+```
+
+### 2. 多值字段分隔符
 
 API 返回的字段如果用特定分隔符拼多值,可以改 `multi_value_separator`。默认分隔符是 `\u3001`。
 
@@ -93,7 +110,7 @@ class PostAdmin(APIAdmin):
     multi_value_separator = ","
 ```
 
-### 2. 查询 / 下载审计日志
+### 3. 查询 / 下载审计日志
 
 ```python
 from django_api_factory.mixins import AuditLogMixin
@@ -110,7 +127,7 @@ class PostAdmin(AuditLogMixin, APIAdmin):
         )
 ```
 
-### 3. 模态表单 action(`ActionFormMixin`)
+### 4. 模态表单 action(`ActionFormMixin`)
 
 ```python
 from django.contrib import admin
@@ -130,7 +147,7 @@ class PostAdmin(APIAdmin):
     }
 ```
 
-### 4. 可插拔缓存后端(无需 redis,默认无)
+### 5. 可插拔缓存后端(无需 redis,默认无)
 
 ```python
 from django_api_factory.mixins import RedisCacheBackend
@@ -143,11 +160,11 @@ class PostAdmin(APIAdmin):
 
 不传 `cache_backend_class` 时,默认 `NullCacheBackend`(纯空操作,零依赖)。
 
-### 5. Schema 注册(线程安全)
+### 6. Schema 注册(线程安全)
 
 APIAdmin 第一次拿到数据时会自动调用 `schema_registry.register(model, fields)` 把 API 字段加到 model 上,你不需要手动调。
 
-### 6. 短期 changelist 缓存(5 分钟重复点击,可选)
+### 7. 短期 changelist 缓存(5 分钟重复点击,可选)
 
 ```python
 class PostAdmin(APIAdmin):
@@ -158,7 +175,7 @@ class PostAdmin(APIAdmin):
 
 默认 **关闭**(`changelist_cache_enabled = False`),库不会按 Django settings 自动选后端。
 
-### 7. API 响应格式(envelope 拆包)
+### 8. API 响应格式(envelope 拆包)
 
 很多简单 REST 列表接口会直接返回裸数组:
 

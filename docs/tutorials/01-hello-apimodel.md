@@ -10,7 +10,7 @@
 
 A Django admin page that lists the 100 posts from
 [JSONPlaceholder](https://jsonplaceholder.typicode.com/posts), with
-pagination, search, and a detail page. **~30 lines of Python total**.
+pagination and a detail page. **~30 lines of Python total**.
 
 ![post admin changelist](https://placehold.co/600x300?text=Changelist+screenshot+here)
 
@@ -134,8 +134,9 @@ class PostAdmin(APIAdmin):
     list_per_page = 20
 ```
 
-> `APIAdmin` is a drop-in `ModelAdmin` subclass. Anything you can do
-> with a normal Django admin, you can do here.
+> `APIAdmin` is a drop-in `ModelAdmin` subclass. Use Django's native
+> `list_display` to control visible API fields and their order. If you
+> leave it unset, `APIAdmin` discovers API fields at request time.
 
 ---
 
@@ -150,7 +151,6 @@ with the superuser you created earlier. You should see:
 
 - A paginated table with 20 posts per page
 - The id, userId, and title columns
-- The Django admin search bar (try searching "qui est esse")
 - Click any post to see a detail page
 
 **If you got here, congratulations** — you have a working CRUD-free

@@ -6,6 +6,27 @@ this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] - 2026-07-06
+
+### Added
+- Native Django `list_display` support for API response fields, so
+  admins can control visible columns and order with the standard
+  ModelAdmin API.
+- `APIAdmin.api_exclude_fields` for auto-generated columns. The default
+  excludes `id` because the row link already covers the detail target.
+
+### Changed
+- Moved API display-field control from `APIModel` to `APIAdmin`, matching
+  Django admin's separation between data shape and presentation.
+- Updated docs and examples to use `list_display = ["id", "userId", "title"]`.
+
+### Removed
+- Removed `APIModel.black_fields`; field hiding is now an admin-level concern.
+
+### Fixed
+- Sort mapping now follows native `list_display` order, including descending
+  sort on the first API field.
+
 ## [0.1.0] - 2026-07-05
 
 ### Added

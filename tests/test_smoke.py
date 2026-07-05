@@ -1,5 +1,7 @@
 """Smoke tests for django-api-factory. See conftest.py for Django config."""
 
+from pathlib import Path
+
 
 def test_imports():
     from django_api_factory.models import APIModel
@@ -49,3 +51,16 @@ def test_myqueryset_clone_is_shallow():
     assert "copy.copy" in src
     # Confirm it's a real override (not inherited)
     assert MyQuerySet._clone is not QuerySet._clone
+
+
+def test_public_docs_document_native_api_list_display():
+    """APIAdmin supports native list_display for API response fields."""
+    root = Path(__file__).resolve().parents[1]
+    public_files = [
+        root / "README.md",
+        root / "README.zh-CN.md",
+        root / "src/django_api_factory/admin.py",
+    ]
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in public_files)
+    assert 'list_display = ["id", "userId", "title"]' in combined
+    assert "black_fields" not in combined

@@ -1,8 +1,8 @@
 # django-api-factory
 
 [![CI](https://github.com/PianistSnk/django-api-factory/actions/workflows/ci.yml/badge.svg)](https://github.com/PianistSnk/django-api-factory/actions)
-[![Coverage](https://img.shields.io/badge/coverage-85.90%25-brightgreen.svg)](#testing)
-[![Release](https://img.shields.io/badge/release-v0.1.0-blue.svg)](#install)
+[![Coverage](https://img.shields.io/badge/coverage-85.95%25-brightgreen.svg)](#testing)
+[![Release](https://img.shields.io/badge/release-v0.1.1-blue.svg)](#install)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 [English](README.md) | [中文](README.zh-CN.md)
@@ -40,7 +40,7 @@ from django_api_factory.admin import APIAdmin
 
 @admin.register(Post)
 class PostAdmin(APIAdmin):
-    pass
+    list_display = ["id", "userId", "title"]
 ```
 
 Run `python manage.py runserver`, log in, and open the model's Django admin
@@ -90,7 +90,25 @@ Open `http://127.0.0.1:8000/admin/`, log in, and choose the example model.
 Most projects can start with `url` plus `APIAdmin`. Use these hooks when the
 upstream API or the host project needs more control.
 
-### 1. Multi-value field separator
+### 1. Columns and field order
+
+Use Django's native `list_display` to choose visible API fields and their
+order. Leave it unset to show all API fields except `api_exclude_fields`
+(`["id"]` by default, because `__str__` already links to the row detail).
+
+```python
+class PostAdmin(APIAdmin):
+    list_display = ["id", "userId", "title"]
+```
+
+For auto-generated columns, hide noisy fields on the admin class:
+
+```python
+class UserAdmin(APIAdmin):
+    api_exclude_fields = ["id", "password", "ssn", "image"]
+```
+
+### 2. Multi-value field separator
 
 API responses may pack multiple values into one string with a separator. The
 default is the ideographic comma (`\u3001`); your API may use `,`, `|`, `;`,
@@ -101,7 +119,7 @@ class PostAdmin(APIAdmin):
     multi_value_separator = ","  # default is "\u3001"
 ```
 
-### 2. Query / download audit log
+### 3. Query / download audit log
 
 Some projects write to `django.contrib.admin.models.LogEntry` with custom `action_flag=4` (query) and `action_flag=6` (download). The library does not write any audit by default — subclass `AuditLogMixin` to add your own:
 
@@ -134,7 +152,7 @@ class MyAuditedAdmin(AuditLogMixin, APIAdmin):
 
 Note: the library does not ship a built-in `view_or_download` helper — implement the file proxy in your own project and call `self.log_download(...)` from there.
 
-### 3. Modal-form actions (`ActionFormMixin`)
+### 4. Modal-form actions (`ActionFormMixin`)
 
 Add modal form + ajax submit to admin actions. The library auto-discovers any action function with a `.layer` attribute and shows a modal when the user clicks "Go" in the action dropdown.
 
@@ -165,7 +183,7 @@ class PostAdmin(APIAdmin):
 
 Supported `params` types: `input` (text/number/date/etc.), `textarea`, `select`, `radio`, `file`.
 
-### 4. Pluggable cache backend (no redis required, opt-in)
+### 5. Pluggable cache backend (no redis required, opt-in)
 
 The core library does not import redis-py at module load. The default cache backend is `NullCacheBackend` (no-op), so the library works out-of-the-box without any cache configuration or coupling.
 
@@ -211,7 +229,7 @@ class DjangoCacheBackend(BaseCacheBackend):
         cache.delete(key)
 ```
 
-### 5. Schema registry — register fields once (thread-safe)
+### 6. Schema registry — register fields once (thread-safe)
 
 The `get_api_data` flow adds API-returned fields to the model class via `add_to_class(...)` so Django admin can render them. Without a registry, this `O(N)` loop runs on every request and is vulnerable to multi-thread races.
 
@@ -245,7 +263,7 @@ class MyAdmin(APIAdmin):
 
 For multi-process setups (gunicorn workers), each worker process builds its own registry — the lock is intra-process only. This is fine because Django's model class registry is also per-process.
 
-### 6. Short-term changelist cache (5-min repeat clicks, opt-in)
+### 7. Short-term changelist cache (5-min repeat clicks, opt-in)
 
 When a user clicks a changelist twice within 5 minutes, the second click usually returns the same data the API was returning seconds ago. To avoid that second API call, enable the short-term changelist cache:
 
@@ -263,7 +281,7 @@ How it works:
 
 This is **opt-in** — by default `changelist_cache_enabled = False`. The library does not pick a backend based on Django settings.
 
-### 7. API response format (envelope unwrap)
+### 8. API response format (envelope unwrap)
 
 Many simple REST list endpoints return a bare array:
 

@@ -10,14 +10,11 @@
   under 4 common envelope shapes. Proves `APIModel.parse_response`
   auto-handles common wrappers with no override.
 
-Each admin uses `get_list_display` to build the column list
-dynamically from the API's actual response fields (the API fields
-aren't Django model fields, so we can't list them in `list_display`
-directly without breaking Django's startup check).
+Each admin uses Django's native `list_display` to choose visible API
+fields and column order.
 """
 
 from django.contrib import admin
-from django.contrib.admin.utils import lookup_field
 
 from django_api_factory.admin import APIAdmin
 
@@ -31,36 +28,32 @@ from .models import (
 )
 
 
-def _get_list_display(admin_self, request):
-    """Shared get_list_display for all 6 admins in this example."""
-    if not admin_self.api_list:
-        admin_self.api_data, admin_self.api_list = admin_self.get_api_data(request)
-    admin_self.export_list = admin_self.api_list
-    valid = ["__str__"]
-    for f in admin_self.api_list:
-        try:
-            lookup_field(f, admin_self.model, admin_self)
-            valid.append(f)
-        except Exception:
-            pass
-    return valid
-
-
 @admin.register(BigPost)
 class BigPostAdmin(APIAdmin):
     """100k rows from the local mock server. Server-side pagination,
     X-Total-Count paginator, cross-page filter (all served by the
     mock server). The paginator reads the live total from the API
     instead of relying on a static expected_total."""
-    list_display_links = ["__str__"]
+    list_display = ["id", "userId", "title", "body"]
     filter_distinct_resource = "posts"
-    get_list_display = _get_list_display
 
 
 @admin.register(DummyJSONUser)
 class DummyJSONUserAdmin(APIAdmin):
     """Real external REST API demo: DummyJSON users, 45+ flattened fields."""
-    list_display_links = ["__str__"]
+    list_display = [
+        "id",
+        "firstName",
+        "lastName",
+        "age",
+        "gender",
+        "email",
+        "phone",
+        "username",
+        "companyName",
+        "companyTitle",
+        "role",
+    ]
     list_per_page = 1000
     filter_distinct_max_rows = 1000
     list_filter_exclude = [
@@ -72,15 +65,13 @@ class DummyJSONUserAdmin(APIAdmin):
         "bankIban",
         "cryptoWallet",
     ]
-    get_list_display = _get_list_display
 
 
 class _EnvelopeShapeAdmin(APIAdmin):
     """Shared base for the 4 envelope demo admins — proves that
     `APIModel.parse_response` auto-handles common wrappers with
     zero per-admin override."""
-    list_display_links = ["__str__"]
-    get_list_display = _get_list_display
+    list_display = ["id", "userId", "title", "body"]
 
 
 @admin.register(PostBare)

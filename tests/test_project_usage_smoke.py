@@ -34,6 +34,18 @@ class ProjectSmokeAdmin(APIAdmin):
     expected_total = 42
 
 
+class ProjectOrderedAdmin(APIAdmin):
+    list_display = ["id", "title", "userId"]
+    list_per_page = 25
+    expected_total = 42
+
+
+class ProjectExcludeAdmin(APIAdmin):
+    api_exclude_fields = ["id", "body"]
+    list_per_page = 25
+    expected_total = 42
+
+
 class FakeAPIResponse:
     status_code = 200
 
@@ -165,6 +177,73 @@ def test_project_filtering_forwards_filter_params_and_total(monkeypatch):
     }
 
 
+def test_project_default_list_display_keeps_id_link_and_api_fields(monkeypatch):
+    admin = ProjectSmokeAdmin(ProjectSmokePost, AdminSite(name="project-smoke"))
+    request = RequestFactory().get("/admin/tests/projectsmokepost/")
+    request.user = ProjectSmokeUser()
+
+    def fake_get(url, timeout):
+        return FakeAPIResponse(
+            [
+                {"id": 101, "userId": 7, "title": "First API row", "body": "alpha"},
+            ],
+        )
+
+    monkeypatch.setattr("django_api_factory.admin.requests.get", fake_get)
+
+    assert admin.get_list_display(request) == ["__str__", "userId", "title", "body"]
+    assert admin.export_list == ["userId", "title", "body"]
+
+
+def test_project_native_list_display_controls_api_columns(monkeypatch):
+    admin = ProjectOrderedAdmin(ProjectSmokePost, AdminSite(name="project-smoke"))
+    request = RequestFactory().get("/admin/tests/projectsmokepost/")
+    request.user = ProjectSmokeUser()
+
+    def fake_get(url, timeout):
+        return FakeAPIResponse(
+            [
+                {"id": 101, "userId": 7, "title": "First API row", "body": "alpha"},
+            ],
+        )
+
+    monkeypatch.setattr("django_api_factory.admin.requests.get", fake_get)
+
+    queryset, fields = admin.get_api_data(request)
+    rows = list(queryset)
+
+    assert fields == ["id", "title", "userId"]
+    assert admin.get_list_display(request) == ["id", "title", "userId"]
+    assert admin.export_list == ["id", "title", "userId"]
+    assert rows[0].body == "alpha"
+
+
+def test_project_native_list_display_passes_admin_checks():
+    admin = ProjectOrderedAdmin(ProjectSmokePost, AdminSite(name="project-smoke"))
+
+    errors = admin.check()
+
+    assert "admin.E108" not in {error.id for error in errors}
+
+
+def test_project_api_exclude_fields_hides_auto_columns(monkeypatch):
+    admin = ProjectExcludeAdmin(ProjectSmokePost, AdminSite(name="project-smoke"))
+    request = RequestFactory().get("/admin/tests/projectsmokepost/")
+    request.user = ProjectSmokeUser()
+
+    def fake_get(url, timeout):
+        return FakeAPIResponse(
+            [
+                {"id": 101, "userId": 7, "title": "First API row", "body": "alpha"},
+            ],
+        )
+
+    monkeypatch.setattr("django_api_factory.admin.requests.get", fake_get)
+
+    assert admin.get_list_display(request) == ["__str__", "userId", "title"]
+    assert admin.export_list == ["userId", "title"]
+
+
 def test_project_sorting_forwards_order_and_sorts_current_page(monkeypatch):
     admin = ProjectSmokeAdmin(ProjectSmokePost, AdminSite(name="project-smoke"))
     admin.api_list = ["userId", "title", "body"]
@@ -195,5 +274,39 @@ def test_project_sorting_forwards_order_and_sorts_current_page(monkeypatch):
         "page": ["1"],
         "page_size": ["25"],
         "_sort": ["title"],
+        "_order": ["desc"],
+    }
+
+
+def test_project_sorting_desc_first_api_field(monkeypatch):
+    admin = ProjectSmokeAdmin(ProjectSmokePost, AdminSite(name="project-smoke"))
+    admin.api_list = ["userId", "title", "body"]
+    request = RequestFactory().get(
+        "/admin/tests/projectsmokepost/",
+        {"o": "-1", "p": "1", "per_page": "25"},
+    )
+    request.user = ProjectSmokeUser()
+    calls = []
+
+    def fake_get(url, timeout):
+        calls.append((url, timeout))
+        return FakeAPIResponse(
+            [
+                {"id": 201, "userId": 1, "title": "Alpha", "body": "first"},
+                {"id": 202, "userId": 2, "title": "Zebra", "body": "second"},
+            ],
+        )
+
+    monkeypatch.setattr("django_api_factory.admin.requests.get", fake_get)
+
+    queryset, _fields = admin.get_api_data(request)
+    rows = list(queryset)
+
+    assert [row.userId for row in rows] == [2, 1]
+    parsed_url = urlparse(calls[0][0])
+    assert parse_qs(parsed_url.query) == {
+        "page": ["1"],
+        "page_size": ["25"],
+        "_sort": ["userId"],
         "_order": ["desc"],
     }

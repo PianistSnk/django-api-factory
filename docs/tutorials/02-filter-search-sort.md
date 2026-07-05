@@ -141,12 +141,12 @@ API's JSON must include the field name verbatim. JSONPlaceholder does
 this already (`"userId": 1, "id": 1, "title": "...", "body": "..."`),
 so sort works automatically.
 
-> **Gotcha**: `?o=N` is 0-based and points at `list_display[N]`. So
-> with `list_display = ["id", "userId", "title"]`, `?o=1` sorts by
-> `userId` (not `title`).
+> **Gotcha**: `?o=N` is 0-based and points at `list_display`. With
+> `list_display = ["id", "userId", "title"]`, `?o=1` sorts by
+> `userId` and `?o=2` sorts by `title`.
 
-Try clicking the "userId" column header — the URL becomes
-`?o=1` and the framework asks the API for `?_sort=userId&_order=asc`.
+Try clicking the "userId" column header — the URL becomes `?o=1` and
+the framework asks the API for `?_sort=userId&_order=asc`.
 Click again to toggle desc.
 
 ---

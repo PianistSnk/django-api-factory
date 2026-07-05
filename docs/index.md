@@ -29,7 +29,7 @@ from django_api_factory.admin import APIAdmin
 
 @admin.register(Post)
 class PostAdmin(APIAdmin):
-    pass
+    list_display = ["id", "userId", "title"]
 ```
 
 Run `python manage.py runserver`, log in, visit `/admin/api/post/`,
@@ -61,6 +61,7 @@ Two standalone projects live in the `examples/` directory:
 
 ## Project status
 
+- [x] **v0.1.1** — native `list_display` support for API fields.
 - [x] **v0.1.0** — first PyPI-ready release.
 - [x] `APIModel` + `APIAdmin` for read-only external REST data.
 - [x] Server-side pagination, cross-page filtering, sorting, and search.

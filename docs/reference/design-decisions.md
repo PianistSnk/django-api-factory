@@ -46,11 +46,12 @@ time and in Django's admin autodiscover.
 
 ## 3. Why a `SchemaRegistry` instead of declaring fields on the model
 
-`APIAdmin.get_list_display(request)` builds the column list at
-request time from the API's actual response fields. The fields
-get registered on the model class via `SchemaRegistry` so Django
-admin's introspecting code (`lookup_field`, `list_filter` choices)
-can find them.
+`APIAdmin.get_list_display(request)` uses Django's native
+`list_display` when the admin class defines it. When it is left at
+Django's default, `APIAdmin` builds the column list at request time
+from the API's actual response fields. The fields get registered on
+the model class via `SchemaRegistry` so Django admin's introspecting
+code (`lookup_field`, `list_filter` choices) can find them.
 
 Alternative considered: requiring users to declare each field as
 a `models.CharField()` / `models.IntegerField()` on the APIModel

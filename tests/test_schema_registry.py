@@ -65,6 +65,15 @@ def test_register_returns_only_newly_added(registry):
     assert sorted(added) == ["c", "d"]
 
 
+def test_register_skips_existing_model_fields(registry):
+    """Existing Django model fields should be tracked, not re-added."""
+    added = registry.register(SchemaModel, ["id", "api_only_field"])
+
+    assert added == ["api_only_field"]
+    assert registry.is_registered(SchemaModel, "id")
+    assert registry.is_registered(SchemaModel, "api_only_field")
+
+
 def test_is_registered(registry):
     """is_registered reports True only after register()."""
     assert registry.is_registered(SchemaModel, "x") is False
@@ -128,7 +137,7 @@ def test_concurrent_register_no_duplicate_adds(registry):
 
 def test_concurrent_register_idempotent_returns_unchanged(registry):
     """After first register, subsequent registers return []. """
-    fields = ["x", "y", "z"]
+    fields = ["fresh_x", "fresh_y", "fresh_z"]
     # First register adds everything
     added = registry.register(SchemaModel, fields)
     assert sorted(added) == sorted(fields)

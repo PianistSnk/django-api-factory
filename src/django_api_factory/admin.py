@@ -90,10 +90,16 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
     Admin class for API-backed models. Subclass this and set `model` to your
     APIModel subclass to display external REST data inside Django admin.
 
-    Subclasses typically just set:
+    Minimal subclasses can be empty:
         class PostAdmin(APIAdmin):
-            list_display = ["id", "title", "body"]
-            list_filter = [("userId", APIMultiSelectFilter)]
+            pass
+
+    `APIAdmin.get_list_display()` discovers API response fields at runtime
+    when `list_display` is left at Django's default. To control visible
+    columns and order, use Django's native `list_display`:
+
+        class PostAdmin(APIAdmin):
+            list_display = ["id", "userId", "title"]
     """
 
     #: Template used for API-backed changelist pages.
@@ -110,6 +116,9 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
 
     #: Field list used by export helpers.
     export_list = None
+
+    #: API response fields hidden from auto-generated admin columns.
+    api_exclude_fields = ["id"]
 
     #: Default page size. Large enough for small APIs, bounded for large APIs.
     list_per_page = 2000
@@ -172,6 +181,31 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
 
     #: GET parameter names that should be normalized by parse_dt().
     date_params: list = []
+
+    def _has_custom_list_display(self):
+        """Return True when the admin explicitly controls column order."""
+        return tuple(self.list_display) != tuple(admin.ModelAdmin.list_display)
+
+    def _get_api_display_fields(self, fields):
+        """Return API fields shown in changelist/export order."""
+        if self._has_custom_list_display():
+            return [
+                field
+                for field in self.list_display
+                if isinstance(field, str) and field in fields
+            ]
+        excluded = set(getattr(self, "api_exclude_fields", []) or [])
+        return [field for field in fields if field not in excluded]
+
+    def check(self, **kwargs):
+        """Allow `list_display` entries that are API response fields."""
+        errors = super().check(**kwargs)
+        if not self._has_custom_list_display():
+            return errors
+        return [
+            error for error in errors
+            if error.id not in {"admin.E108", "admin.E109"}
+        ]
 
     def get_object(self, request, object_id, from_field=None):
         """
@@ -1340,10 +1374,28 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         # worked (no-op pass for unknown idx), but server-side sort
         # translation read the un-converted idx and went to the wrong field. Moved
         # out of the actions gate so the conversion is unconditional.
+        custom_list_display = self._has_custom_list_display()
+        configured_list_display = list(self.list_display)
         for i in order_list:
             try:
                 n = int(i)
             except ValueError:
+                continue
+            descending = str(i).startswith("-")
+            if custom_list_display:
+                # Native list_display mode: N points directly at the
+                # configured column, so `?o=2` means list_display[2].
+                idx = abs(n)
+                if idx >= len(configured_list_display):
+                    continue
+                field_name = configured_list_display[idx]
+                if field_name == "__str__":
+                    field_name = "id"
+                if not isinstance(field_name, str):
+                    continue
+                tmp_order_list.append(
+                    f"-{field_name}" if descending else field_name
+                )
                 continue
             # Map Django admin's `?o=N` (UI column idx, 0-based,
             # points at list_display[N]) to a field reference. The
@@ -1359,15 +1411,13 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
             if n == 0:
                 # Sort by the pk/id that `__str__` displays.
                 tmp_order_list.append("id")
-            elif n == -1:
-                tmp_order_list.append("-id")
             elif n > 0:
                 # n=1 → fields[0], n=2 → fields[1], n=3 → fields[2]
                 tmp_order_list.append(str(n - 1))
-            elif n < -1:
-                # n=-2 → fields[0] desc, n=-3 → fields[1] desc, etc.
-                tmp_order_list.append("-" + str(-(n + 1)))
-            order_list = tmp_order_list
+            elif n < 0:
+                # n=-1 → fields[0] desc, n=-2 → fields[1] desc, etc.
+                tmp_order_list.append("-" + str(abs(n) - 1))
+        order_list = tmp_order_list
 
         # Server-side sort: translate the first sort key from Django
         # admin's `?o=N` (UI column idx) to the API's
@@ -1381,20 +1431,31 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         # back to client-side sort on the current page — documented
         # limitation.
         #
-        # Cold start: `self.api_list` is set on the second request
-        # onward (first request goes through get_list_display → get_api_data
-        # → sets self.api_list). On the first request we don't know
-        # the field names yet, so server-side sort is skipped and the
-        # legacy client-side sort path handles the in-page ordering.
-        if order_list and getattr(self, "api_list", None):
+        # Auto mode cold start: `self.api_list` is set after the first
+        # get_list_display → get_api_data pass, so the first request may
+        # fall back to in-page sorting. Native list_display mode already
+        # knows the field names and can forward `_sort` immediately.
+        known_sort_fields = list(getattr(self, "api_list", None) or [])
+        if custom_list_display:
+            for field_name in configured_list_display:
+                if (
+                    isinstance(field_name, str)
+                    and field_name != "__str__"
+                    and field_name not in known_sort_fields
+                ):
+                    known_sort_fields.append(field_name)
+        if order_list and known_sort_fields:
             first = order_list[0]
             if first in ("id", "-id"):
                 sort_field, sort_dir = "id", "desc" if first.startswith("-") else "asc"
+            elif first.lstrip("-") in known_sort_fields:
+                sort_field = first.lstrip("-")
+                sort_dir = "desc" if first.startswith("-") else "asc"
             else:
                 try:
                     idx = abs(int(first))
-                    if idx < len(self.api_list):
-                        sort_field = self.api_list[idx]
+                    if idx < len(known_sort_fields):
+                        sort_field = known_sort_fields[idx]
                         sort_dir = "desc" if first.startswith("-") else "asc"
                     else:
                         sort_field = None
@@ -1481,11 +1542,11 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
                 data = []
 
         if data:
-            fields = []
-            [fields.append(j) for j in data[0] if j not in fields]
+            all_fields = []
+            [all_fields.append(j) for j in data[0] if j not in all_fields]
         else:
-            fields = ["id"]
-        fields = [i for i in fields if i not in self.model.black_fields]
+            all_fields = ["id"]
+        fields = self._get_api_display_fields(all_fields)
 
         if order_list:
             locale.setlocale(locale.LC_ALL, "")
@@ -1498,6 +1559,11 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
                 if i in ("id", "-id"):
                     sort_keys.append("id")
                     sort_orders.append(1 if i[0] != "-" else -1)
+                    continue
+                field_ref = i[1:] if i.startswith("-") else i
+                if field_ref in all_fields:
+                    sort_keys.append(field_ref)
+                    sort_orders.append(-1 if i.startswith("-") else 1)
                     continue
                 try:
                     idx = abs(int(i))
@@ -1552,7 +1618,7 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         # SchemaRegistry is idempotent and thread-safe: first request
         # adds the fields, all subsequent requests skip the add_to_class
         # loop entirely.
-        schema_registry.register(self.model, fields)
+        schema_registry.register(self.model, all_fields)
         for field_name in self.paras_list:
             if (
                 field_name not in ("q", "o")
@@ -1635,7 +1701,7 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
                 # 1-10, page 2 ids also 1-10) and break detail-view links.
                 real_id = item.get("id", i)
                 mymodel = self.model(id=real_id, pk=real_id)
-                for field_name in fields:
+                for field_name in all_fields:
                     if field_name in item:
                         setattr(mymodel, field_name, item[field_name])
                 mymodels.append(mymodel)
@@ -1694,11 +1760,18 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         return mymodels_qs, fields
 
     def get_list_display(self, request):
-        """Return dynamic list_display fields discovered from the API."""
+        """Return native or dynamic list_display fields for API rows."""
         if not self.api_list:
             self.api_data, self.api_list = self.get_api_data(request)
+        if self._has_custom_list_display():
+            self.export_list = [
+                field
+                for field in self.list_display
+                if isinstance(field, str) and field in self.api_list
+            ]
+            return self.list_display
         self.export_list = self.api_list
-        return self.api_list
+        return ["__str__", *self.api_list]
 
 
 class APINoDataAdmin(APIAdmin):

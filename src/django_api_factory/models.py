@@ -13,7 +13,6 @@ class APIModel(models.Model):
 
     Subclasses may override:
     - cache(**kwargs) -> str | None: Redis cache key. Default disables cache.
-    - black_fields: list of field names to hide from the admin
     - parse_response(response_data) -> list[dict]: convert raw API response
       body into a list of row dicts. Default handles common envelope shapes,
       can infer a single list-valued top-level key, and flattens nested dicts.
@@ -32,9 +31,6 @@ class APIModel(models.Model):
         field. The post_migrate approach is the documented way to trim
         the auto-generated permission set.
     """
-
-    #: API response fields hidden from generated admin columns.
-    black_fields = ["id"]  # type: list[str]
 
     #: Fixed URL for simple read-only APIs.
     url = None

@@ -190,7 +190,14 @@ class SchemaRegistry:
         """
         with self._lock:
             registered = self._registry.setdefault(model, set())
-            to_add = [f for f in fields if f not in registered]
+            to_add = []
+            for f in fields:
+                if f in registered:
+                    continue
+                if hasattr(model, f):
+                    registered.add(f)
+                    continue
+                to_add.append(f)
             if to_add:
                 from django.db import models as dj_models
                 for f in to_add:
