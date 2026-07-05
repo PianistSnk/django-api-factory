@@ -40,6 +40,8 @@ dev = [
     "redis>=4.0",
     # ExportMixin.export_to_excel tests need openpyxl (tests/test_mixins.py).
     "openpyxl>=3.0",
+    # Filter integration tests exercise optional SimpleUI detection.
+    "django-simpleui>=2026.1.13",
 ]
 simpleui = [
     "django-simpleui>=2026.1.13",
