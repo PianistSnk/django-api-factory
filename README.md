@@ -1,23 +1,25 @@
 # django-api-factory
 
 [![CI](https://github.com/PianistSnk/django-api-factory/actions/workflows/ci.yml/badge.svg)](https://github.com/PianistSnk/django-api-factory/actions)
-[![Coverage](https://img.shields.io/badge/coverage-80.19%25-brightgreen.svg)](#testing)
-[![PyPI](https://img.shields.io/badge/pypi-v0.1.0-blue.svg)](#install)
+[![Coverage](https://img.shields.io/badge/coverage-85.90%25-brightgreen.svg)](#testing)
+[![Release](https://img.shields.io/badge/release-v0.1.0-blue.svg)](#install)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 [English](README.md) | [中文](README.zh-CN.md)
 
-**Display any REST API as a Django admin model — no frontend, no migrations, just `urls()` and `cache()`.**
+**Display read-only REST API data in Django admin — no frontend and no database table for API rows.**
 
-Three years of production-tested code distilled into a 200-line package.
+Use a fixed `url` for simple APIs, or override `urls()` when the upstream API
+needs custom pagination, filtering, or sorting parameters.
 
 📖 **Tutorials** — [1. Hello, APIModel (15 min)](docs/tutorials/01-hello-apimodel.md) · [2. Filter, search, sort (20 min)](docs/tutorials/02-filter-search-sort.md) · [3. Cache, export, custom actions (25 min)](docs/tutorials/03-cache-export-actions.md)
 
 ## Why
 
-Django admin is the fastest CRUD UI in existence. Why build a separate frontend for
-data that lives in someone else's API? `django-api-factory` lets you mount any REST
-endpoint as a Django admin changelist — search, filter, sort, export, all for free.
+Django admin is already a useful internal data UI. `django-api-factory`
+lets you mount external REST endpoints as Django admin changelists, with
+dynamic columns, pagination, filters, search, sorting, exports, and Django
+view permissions.
 
 ## 30-second example
 
@@ -26,13 +28,14 @@ endpoint as a Django admin changelist — search, filter, sort, export, all for 
 from django_api_factory.models import APIModel
 
 class Post(APIModel):
-    def urls(self, **kwargs):
-        return "https://jsonplaceholder.typicode.com/posts"
+    url = "https://jsonplaceholder.typicode.com/posts"
 
-    def cache(self, **kwargs):
-        return None  # disable Redis
+    class Meta(APIModel.Meta):
+        verbose_name = "Post"
+        verbose_name_plural = "Posts"
 
 # admin.py
+from django.contrib import admin
 from django_api_factory.admin import APIAdmin
 
 @admin.register(Post)
@@ -40,7 +43,8 @@ class PostAdmin(APIAdmin):
     pass
 ```
 
-Run `python manage.py runserver`, log in, visit `/admin/api/post/`, see your API data.
+Run `python manage.py runserver`, log in, and open the model's Django admin
+changelist.
 
 ## Install
 
@@ -53,36 +57,48 @@ pip install django-api-factory
 Two standalone projects live under `examples/`. Pick one:
 
 ```bash
-# Option A: jsonplaceholder (public REST API, ~40 lines total)
+# Option A: JSONPlaceholder (public REST API), from the repo root
+pip install -e .
+pip install -r examples/jsonplaceholder/requirements.txt
 cd examples/jsonplaceholder
-pip install -r requirements.txt
 python manage.py migrate
 python manage.py createsuperuser
 python manage.py runserver
+```
 
-# Option B: local-mock (100k rows + 4 envelope shapes, needs the mock server)
-cd ../..   # back to the repo root
+For the local 100k-row example, run the mock API and Django app in two terminals:
+
+```bash
+# Terminal 1, from the repo root
 pip install -e .
-python examples/local-mock/mock_server.py --port 8200 --rows 100000 &
+pip install -r examples/local-mock/requirements.txt
+python examples/local-mock/mock_server.py --port 8200 --rows 100000
+```
+
+```bash
+# Terminal 2, from the repo root, using the same virtualenv
 cd examples/local-mock
 python manage.py migrate
 python manage.py createsuperuser
 python manage.py runserver
 ```
 
-Then open http://127.0.0.1:8000/admin/api/post/ to see live data from JSONPlaceholder.
+Open `http://127.0.0.1:8000/admin/`, log in, and choose the example model.
 
 ## Customization hooks
 
-Two business-specific assumptions used to be hardcoded — both are now no-op by default and configurable per admin class.
+Most projects can start with `url` plus `APIAdmin`. Use these hooks when the
+upstream API or the host project needs more control.
 
 ### 1. Multi-value field separator
 
-API responses may pack multiple values into one string with a separator. The default convention is the Chinese 顿号 `、`; your API may use `,`, `|`, `;`, etc.
+API responses may pack multiple values into one string with a separator. The
+default is the ideographic comma (`\u3001`); your API may use `,`, `|`, `;`,
+or another separator.
 
 ```python
 class PostAdmin(APIAdmin):
-    multi_value_separator = ","  # default is "、"
+    multi_value_separator = ","  # default is "\u3001"
 ```
 
 ### 2. Query / download audit log
@@ -123,6 +139,7 @@ Note: the library does not ship a built-in `view_or_download` helper — impleme
 Add modal form + ajax submit to admin actions. The library auto-discovers any action function with a `.layer` attribute and shows a modal when the user clicks "Go" in the action dropdown.
 
 ```python
+from django.contrib import admin
 from django_api_factory.admin import APIAdmin  # already includes ActionFormMixin
 
 class PostAdmin(APIAdmin):
@@ -248,26 +265,24 @@ This is **opt-in** — by default `changelist_cache_enabled = False`. The librar
 
 ### 7. API response format (envelope unwrap)
 
-`django-api-factory` follows the [REST convention](https://jsonapi.org/format/)
-used by [jsonplaceholder](https://jsonplaceholder.typicode.com/),
-[GitHub](https://docs.github.com/en/rest), [Stripe](https://stripe.com/docs/api),
-and [Google Cloud](https://cloud.google.com/apis/design): **list endpoints return
-a bare array**.
+Many simple REST list endpoints return a bare array:
 
 ```http
-GET /api/orders         → 200 [{...}, {...}, ...]   ← recommended (REST canonical)
+GET /api/orders         → 200 [{...}, {...}, ...]   ← simplest shape
 GET /api/orders?page=2  → 200 [{...}, ...]          ← pagination via query params
 ```
 
-For compatibility, `APIModel.parse_response` also handles 3 envelope shapes that
-appear in real APIs (in priority order, first match wins):
+For compatibility, `APIModel.parse_response` also handles common envelope
+shapes that appear in real APIs (in priority order, first match wins):
 
 | Response body                          | Source                                                |
 | -------------------------------------- | ----------------------------------------------------- |
-| `[{...}]`                              | REST canonical (jsonplaceholder / GitHub / Stripe)   |
-| `{"data": [...]}`                      | Custom internal APIs / Laravel default                |
-| `{"items": [...]}`                     | Older internal APIs                                   |
+| `[{...}]`                              | Bare list endpoints such as JSONPlaceholder          |
+| `{"data": [...]}`                      | Laravel-style and custom APIs                        |
+| `{"items": [...]}`                     | Common custom APIs                                    |
 | `{"results": [...]}`                   | Django REST Framework `PageNumberPagination` default  |
+| `{"rows": [...]}` / `{"records": [...]}` | Table-style APIs                                   |
+| `{"users": [...], "total": 208}`       | Any response with exactly one top-level list field    |
 
 **If your API uses something else**, override `parse_response` on your
 `APIModel` subclass:
@@ -285,26 +300,16 @@ The default raises `ValueError` with a clear message telling you how to
 override — so a misconfigured envelope shows up immediately rather than
 silently rendering an empty changelist.
 
-We deliberately do not invent a 5th canonical key (e.g. `payload`, `rows`,
-`list`) — the four shapes above cover the formats used by the major API
-ecosystems. If you control the API, **return a bare array** and you won't
-need this hook at all.
-
-## Status
-
-- [x] **v0.1.0** — first PyPI-ready release.
-- [x] `APIModel` + `APIAdmin` for read-only external REST data.
-- [x] Server-side pagination, cross-page filtering, sorting, and search.
-- [x] Optional cache, export, audit-log, and modal-action hooks.
-- [x] Django view-permission integration for API-backed admin pages.
-- [x] Documentation, tutorials, examples, CI, and publish workflow.
+Nested row dictionaries are flattened by default, so
+`{"company": {"name": "Acme"}}` becomes `companyName` in the admin.
+If you control the API, returning a bare array remains the simplest path.
 
 See `docs/tutorials/` for step-by-step usage guides.
 
 ## Testing
 
 ```bash
-# Install dev dependencies (adds pytest-cov)
+# Install dev dependencies
 pip install -e ".[dev]"
 
 # Run all tests + coverage report
@@ -317,14 +322,16 @@ pytest tests/test_filter.py -v
 open htmlcov/index.html
 ```
 
-The suite has **88 tests** covering the core (audit hooks, schema registry, action-form modal, detail/changelist cache, filter, app config). Coverage is **72%** with `--cov-fail-under=70` enforced in `pyproject.toml`. The remaining 28% is mostly inside `get_api_data` (the `requests.get` + data-munging path), which is better covered by end-to-end tests in the `example/` project than by unit tests.
+The suite has **246 tests** covering permissions, filters, pagination,
+sorting, response parsing, cache hooks, modal actions, and project-level
+usage. Coverage is currently **85.90%** with `--cov-fail-under=70`
+enforced in `pyproject.toml`.
 
 ## Permissions
 
 `django-api-factory` is read-only: the data lives in someone else's REST
 endpoint, not in your database, so users cannot add / change / delete
-API-sourced rows. Only the `view_<modelname>` permission is auto-generated
-per model.
+API-sourced rows. Only the `view_<modelname>` permission is kept per model.
 
 Granting access is just standard Django auth:
 
@@ -341,6 +348,10 @@ auto-generates `('add', 'change', 'delete', 'view')`. We trim the
 unwanted three via a `post_migrate` signal handler in
 `apps.DjangoApiFactoryConfig.ready()` — re-runs of `manage.py migrate`
 are idempotent.
+
+You still run Django's normal `manage.py migrate` for `auth`, `admin`, and
+permission tables; `APIModel` subclasses do not create data tables for API
+rows.
 
 ## License
 

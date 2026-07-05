@@ -1,21 +1,21 @@
 # django-api-factory
 
 [![CI](https://github.com/PianistSnk/django-api-factory/actions/workflows/ci.yml/badge.svg)](https://github.com/PianistSnk/django-api-factory/actions)
-[![Coverage](https://img.shields.io/badge/coverage-80.19%25-brightgreen.svg)](#testing)
-[![PyPI](https://img.shields.io/badge/pypi-v0.1.0-blue.svg)](#install)
+[![Coverage](https://img.shields.io/badge/coverage-85.90%25-brightgreen.svg)](#testing)
+[![Release](https://img.shields.io/badge/release-v0.1.0-blue.svg)](#install)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 [English](README.md) | [中文](README.zh-CN.md)
 
-**把任何 REST API 当作 Django admin 模型来管理 — 无需前端,无需数据库迁移,只需实现 `urls()` 和 `cache()`。**
+**把只读 REST API 数据显示到 Django admin 里 — 不写前端,也不为 API 行数据建数据库表。**
 
-3 年生产代码浓缩成 200 行包。
+简单 API 只需要写 `url`; 如果上游 API 有自己的分页、筛选、排序参数,再 override `urls()`。
 
 📖 **教程** — [1. Hello, APIModel (15 分钟)](docs/tutorials/01-hello-apimodel.md) · [2. 筛选/搜索/排序 (20 分钟)](docs/tutorials/02-filter-search-sort.md) · [3. 缓存/导出/自定义 action (25 分钟)](docs/tutorials/03-cache-export-actions.md)
 
 ## 为什么
 
-Django admin 是世界上最快的 CRUD UI。数据在别人的 API 里,为什么要单独写一个前端?`django-api-factory` 让你把任何 REST 端点挂到 Django admin changelist 上 — 搜索、筛选、排序、导出全都白送。
+Django admin 本来就是很实用的内部数据 UI。`django-api-factory` 让你把外部 REST 端点挂成 Django admin changelist,并保留动态列、分页、筛选、搜索、排序、导出和 Django view 权限。
 
 ## 30 秒上手
 
@@ -24,13 +24,14 @@ Django admin 是世界上最快的 CRUD UI。数据在别人的 API 里,为什�
 from django_api_factory.models import APIModel
 
 class Post(APIModel):
-    def urls(self, **kwargs):
-        return "https://jsonplaceholder.typicode.com/posts"
+    url = "https://jsonplaceholder.typicode.com/posts"
 
-    def cache(self, **kwargs):
-        return None  # 关闭 Redis 缓存
+    class Meta(APIModel.Meta):
+        verbose_name = "Post"
+        verbose_name_plural = "Posts"
 
 # admin.py
+from django.contrib import admin
 from django_api_factory.admin import APIAdmin
 
 @admin.register(Post)
@@ -38,7 +39,7 @@ class PostAdmin(APIAdmin):
     pass
 ```
 
-跑 `python manage.py runserver`,登录,访问 `/admin/api/post/`,看到 API 数据。
+跑 `python manage.py runserver`,登录,打开这个模型的 Django admin changelist。
 
 ## 安装
 
@@ -51,17 +52,26 @@ pip install django-api-factory
 `examples/` 下有两个独立项目。选一个:
 
 ```bash
-# 选 A:jsonplaceholder(公共 REST API,总 ~40 行)
+# 选 A:JSONPlaceholder(公共 REST API),从仓库根目录运行
+pip install -e .
+pip install -r examples/jsonplaceholder/requirements.txt
 cd examples/jsonplaceholder
-pip install -r requirements.txt
 python manage.py migrate
 python manage.py createsuperuser
 python manage.py runserver
+```
 
-# 选 B:local-mock(100k 行 + 4 种 envelope,需先起 mock server)
-cd ../..   # 回仓库根
+local-mock 的 100k 行示例需要两个终端:一个跑 mock API,一个跑 Django。
+
+```bash
+# 终端 1,从仓库根目录运行
 pip install -e .
-python examples/local-mock/mock_server.py --port 8200 --rows 100000 &
+pip install -r examples/local-mock/requirements.txt
+python examples/local-mock/mock_server.py --port 8200 --rows 100000
+```
+
+```bash
+# 终端 2,从仓库根目录运行,使用同一个 virtualenv
 cd examples/local-mock
 python manage.py migrate
 python manage.py createsuperuser
@@ -72,13 +82,15 @@ python manage.py runserver
 
 ## 自定义钩子
 
+多数项目可以从 `url` + `APIAdmin` 开始。下面这些钩子用于处理上游 API 或宿主项目的特殊需求。
+
 ### 1. 多值字段分隔符
 
-API 返回的字段如果用特定分隔符拼多值(默认中文顿号 `、`),改 `api_field_separator`:
+API 返回的字段如果用特定分隔符拼多值,可以改 `multi_value_separator`。默认分隔符是 `\u3001`。
 
 ```python
 class PostAdmin(APIAdmin):
-    api_field_separator = ","
+    multi_value_separator = ","
 ```
 
 ### 2. 查询 / 下载审计日志
@@ -101,9 +113,10 @@ class PostAdmin(AuditLogMixin, APIAdmin):
 ### 3. 模态表单 action(`ActionFormMixin`)
 
 ```python
-from django_api_factory.mixins import ActionFormMixin
+from django.contrib import admin
+from django_api_factory.admin import APIAdmin
 
-class PostAdmin(ActionFormMixin, APIAdmin):
+class PostAdmin(APIAdmin):
     actions = ["add_remarks"]
 
     @admin.action(description="补充备注")
@@ -147,21 +160,23 @@ class PostAdmin(APIAdmin):
 
 ### 7. API 响应格式(envelope 拆包)
 
-`django-api-factory` 遵循 [REST 约定](https://jsonapi.org/format/)([jsonplaceholder](https://jsonplaceholder.typicode.com/)、[GitHub](https://docs.github.com/en/rest)、[Stripe](https://stripe.com/docs/api)、[Google Cloud](https://cloud.google.com/apis/design) 都这么用):**列表端点直接返回裸数组**。
+很多简单 REST 列表接口会直接返回裸数组:
 
 ```http
-GET /api/orders         → 200 [{...}, {...}, ...]   ← 推荐(REST 规范)
+GET /api/orders         → 200 [{...}, {...}, ...]   ← 最简单的形态
 GET /api/orders?page=2  → 200 [{...}, ...]          ← 分页走 query 参数
 ```
 
-为兼容性,`APIModel.parse_response` 也支持 3 种业界真实的 envelope 格式(按优先级,首个匹配胜出):
+为兼容性,`APIModel.parse_response` 也支持常见 envelope 格式(按优先级,首个匹配胜出):
 
 | 响应体 | 来源 |
 |---|---|
-| `[{...}]` | REST 规范(jsonplaceholder / GitHub / Stripe) |
-| `{"data": [...]}` | 自家 API / Laravel 默认 |
-| `{"items": [...]}` | 旧 internal API |
+| `[{...}]` | JSONPlaceholder 这类裸数组接口 |
+| `{"data": [...]}` | Laravel 风格 / 自定义 API |
+| `{"items": [...]}` | 常见自定义 API |
 | `{"results": [...]}` | Django REST Framework `PageNumberPagination` 默认 |
+| `{"rows": [...]}` / `{"records": [...]}` | 表格型 API |
+| `{"users": [...], "total": 208}` | 只有一个顶层 list 字段的响应 |
 
 **如果你的 API 用别的**,override `parse_response`:
 
@@ -176,21 +191,12 @@ class LegacyOrder(APIModel):
 
 默认不匹配时抛 `ValueError`,带清晰的提示告诉你怎么 override — 配错 envelope 时立刻看到,而不是静默渲染空 changelist。
 
-我们**不发明第 5 种 key**(不造 `payload` / `rows` / `list` 这种非业界 key)。上面 4 种覆盖了主流 API 生态。如果你控制 API,**直接返裸数组**就完全不用这钩子。
-
-## 状态
-
-- [x] **v0.1.0** — 第一个 PyPI 发布版。
-- [x] `APIModel` + `APIAdmin` 支持只读外部 REST 数据。
-- [x] 服务端分页、跨页筛选、排序、搜索。
-- [x] 可选缓存、导出、审计日志、弹窗 action 钩子。
-- [x] 接入 Django view 权限体系。
-- [x] 文档、教程、示例、CI、发布 workflow。
+嵌套 dict 默认会被拍平,比如 `{"company": {"name": "Acme"}}` 会变成 admin 里的 `companyName`。如果你能控制 API,直接返回裸数组仍然是最简单的方式。
 
 ## 测试
 
 ```bash
-# 装 dev 依赖(带 pytest-cov)
+# 装 dev 依赖
 pip install -e ".[dev]"
 
 # 跑全量 + 覆盖率
@@ -203,9 +209,22 @@ pytest tests/test_filter.py
 open htmlcov/index.html
 ```
 
+当前测试套件有 **246 个测试**,覆盖权限、筛选、分页、排序、响应解析、缓存钩子、弹窗 action 和项目级用法。当前覆盖率是 **85.90%**,并在 `pyproject.toml` 中用 `--cov-fail-under=70` 强制兜底。
+
 ## 权限
 
-`APIModel` 子类默认只有 `view` 权限,没有 `add`/`change`/`delete`(数据在别人 API 里,我们不让你误编辑)。通过 `apps.DjangoApiFactoryConfig.ready()` 的 `post_migrate` signal 自动剥离 `Meta.default_permissions`(Django 5.2 硬编码这 4 个权限,只能 post_migrate 删)。
+`APIModel` 子类默认只保留 `view` 权限,没有 `add`/`change`/`delete`。数据在别人 API 里,这个库只负责查看,不负责误编辑。
+
+授权方式就是标准 Django auth:
+
+1. 用 superuser 登录 `/admin/`。
+2. 进入 **Users** 或 **Groups**,选择用户或组。
+3. 在 **Permissions** 中勾选 `Can view <your_api_model>`。
+4. 保存。
+
+实现上,Django 5.2 会固定生成 `add/change/delete/view` 四个权限。库在 `apps.DjangoApiFactoryConfig.ready()` 里通过 `post_migrate` signal 删除前三个;重复运行 `manage.py migrate` 是幂等的。
+
+你仍然需要正常跑 Django 的 `manage.py migrate` 来创建 `auth`、`admin`、permission 等表; `APIModel` 子类不会为 API 行数据创建业务表。
 
 ## License
 
