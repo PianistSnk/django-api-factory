@@ -1,6 +1,7 @@
 """Tests for APIFilter (filter.py)."""
 
-from django.test import RequestFactory
+from django.test import RequestFactory, override_settings
+from django.template import Context, Template
 
 from django_api_factory.admin import APIAdmin
 from django_api_factory.filter import APIFilter, APIMultiSelectFilter
@@ -61,6 +62,20 @@ def test_filter_deduplicates_choices():
     assert "apple" in f.lookup_choices
     assert "banana" in f.lookup_choices
     assert len(f.lookup_choices) == 2
+
+
+def test_filter_choices_support_simpleui_option_indices():
+    """SimpleUI reads lookup choices as option.0 and option.1."""
+    f, _, _ = _make_filter([{"category": "apple"}])
+    choice = f.lookup_choices[0]
+
+    assert str(choice) == "apple"
+    assert choice[0] == "apple"
+    assert choice[1] == "apple"
+    assert (
+        Template("{{ choice.0 }}|{{ choice.1 }}")
+        .render(Context({"choice": choice}))
+    ) == "apple|apple"
 
 
 def test_filter_splits_configured_multi_value_separator():
@@ -223,6 +238,52 @@ def test_apiadmin_auto_generated_filters_support_exclude_list():
         ("category", APIMultiSelectFilter),
         ("status", APIMultiSelectFilter),
     ]
+
+
+@override_settings(INSTALLED_APPS=["simpleui", "django.contrib.admin"])
+def test_apiadmin_uses_simpleui_filters_when_theme_precedes_admin():
+    """SimpleUI must be before django.contrib.admin to own admin templates."""
+    admin = APIAdmin.__new__(APIAdmin)
+
+    assert admin.use_simpleui_filters is True
+    assert admin.use_elementui_filters is True
+    assert admin.load_elementui_assets is False
+
+
+@override_settings(INSTALLED_APPS=["django.contrib.admin", "simpleui"])
+def test_apiadmin_does_not_use_simpleui_filters_after_admin():
+    """Django resolves admin templates before later-installed SimpleUI."""
+    admin = APIAdmin.__new__(APIAdmin)
+
+    assert admin.use_simpleui_filters is False
+    assert admin.use_elementui_filters is True
+    assert admin.load_elementui_assets is True
+
+
+@override_settings(
+    INSTALLED_APPS=["django.contrib.admin"],
+    DJANGO_API_FACTORY_ELEMENTUI_FILTERS=False,
+)
+def test_apiadmin_can_disable_elementui_filters():
+    """Projects can opt back into the built-in non-ElementUI filter UI."""
+    admin = APIAdmin.__new__(APIAdmin)
+
+    assert admin.use_elementui_filters is False
+    assert admin.load_elementui_assets is False
+
+
+@override_settings(
+    DJANGO_API_FACTORY_VUE_JS_URL="/static/vendor/vue.js",
+    DJANGO_API_FACTORY_ELEMENTUI_JS_URL="/static/vendor/element.js",
+    DJANGO_API_FACTORY_ELEMENTUI_CSS_URL="/static/vendor/element.css",
+)
+def test_apiadmin_elementui_asset_urls_are_configurable():
+    """Projects can replace CDN URLs with self-hosted static files."""
+    admin = APIAdmin.__new__(APIAdmin)
+
+    assert admin.vue_js_url == "/static/vendor/vue.js"
+    assert admin.elementui_js_url == "/static/vendor/element.js"
+    assert admin.elementui_css_url == "/static/vendor/element.css"
 
 
 def test_filter_empty_value_display():

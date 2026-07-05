@@ -5,6 +5,56 @@ from django.contrib.admin.views.main import PAGE_VAR
 from django.http import QueryDict
 
 
+class APIFilterChoice:
+    """Value wrapper compatible with Django filters and SimpleUI options.
+
+    Django's `AllValuesFieldListFilter` expects `lookup_choices` items to be
+    raw values and calls `str(value)` when building links. SimpleUI's
+    `search_form.html` expects each item to behave like `(value, label)` and
+    reads `option.0` / `option.1`. This wrapper supports both contracts without
+    storing tuple reprs in filter URLs.
+    """
+
+    __slots__ = ("label", "value")
+
+    def __init__(self, value, label=None):
+        self.value = value
+        self.label = value if label is None else label
+
+    def __str__(self):
+        return str(self.value)
+
+    def __repr__(self):
+        return repr(self.value)
+
+    def __getitem__(self, index):
+        if index in (0, "0"):
+            return self.value
+        if index in (1, "1"):
+            return self.label
+        raise IndexError(index)
+
+    def __iter__(self):
+        yield self.value
+        yield self.label
+
+    def __len__(self):
+        return 2
+
+    def __eq__(self, other):
+        if isinstance(other, APIFilterChoice):
+            return self.value == other.value
+        return self.value == other
+
+    def __hash__(self):
+        return hash(self.value)
+
+    def __lt__(self, other):
+        if isinstance(other, APIFilterChoice):
+            other = other.value
+        return self.value < other
+
+
 class APIFilter(AllValuesFieldListFilter):
     template = "admin/django_api_factory/filter.html"
 
@@ -39,7 +89,8 @@ class APIFilter(AllValuesFieldListFilter):
         # values. Fall back to the current page's values if the admin
         # doesn't override (or the call fails).
         values, total_count = self._collect_choices(field, model_admin, request)
-        self.lookup_choices = values
+        self.raw_lookup_choices = values
+        self.lookup_choices = self._wrap_lookup_choices(values)
         # Stash the TRUE total count on the spec so the template can
         # render "(X of Y)" when the choices are truncated. Legacy
         # callers (no get_filter_choices hook) get total = len(values).
@@ -116,6 +167,12 @@ class APIFilter(AllValuesFieldListFilter):
                 seen.add(value)
                 out.append(value)
         return out
+
+    def _wrap_lookup_choices(self, values):
+        return [
+            value if value is None else APIFilterChoice(value)
+            for value in values
+        ]
 
     def _first_lookup_value(self, value):
         if isinstance(value, (list, tuple)):

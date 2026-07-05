@@ -4,6 +4,14 @@ from django.apps import AppConfig
 from django.db.models.signals import post_migrate
 
 
+def iter_api_model_subclasses(model_cls):
+    """Yield all concrete APIModel subclasses recursively."""
+    for subclass in model_cls.__subclasses__():
+        yield from iter_api_model_subclasses(subclass)
+        if not subclass._meta.abstract:
+            yield subclass
+
+
 def trim_api_model_permissions(**kwargs):
     """Strip the auto-generated default permissions for APIModel subclasses.
 
@@ -23,9 +31,7 @@ def trim_api_model_permissions(**kwargs):
 
     from django_api_factory.models import APIModel
 
-    for subclass in APIModel.__subclasses__():
-        if subclass._meta.abstract:
-            continue
+    for subclass in iter_api_model_subclasses(APIModel):
         ct = ContentType.objects.get_for_model(subclass)
         Permission.objects.filter(content_type=ct).exclude(
             codename__startswith="view_"
@@ -38,4 +44,7 @@ class DjangoApiFactoryConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
 
     def ready(self):
-        post_migrate.connect(trim_api_model_permissions, sender=self)
+        post_migrate.connect(
+            trim_api_model_permissions,
+            dispatch_uid="django_api_factory.trim_api_model_permissions",
+        )

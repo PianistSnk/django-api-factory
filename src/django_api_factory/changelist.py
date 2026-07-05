@@ -56,6 +56,9 @@ class APIChangeList(ChangeList):
         # option as `selected`. Without this, the selector always shows
         # 10 selected because `cl.list_per_page` is the class attr.
         self.effective_per_page = paginator.per_page
+        self.per_page_choices = self.model_admin.get_per_page_choices(
+            self.effective_per_page
+        )
         # Decide multi_page using the EFFECTIVE per_page (which may
         # have been overridden by `?per_page=N` in the admin's
         # get_paginator). We can't read paginator.per_page here because

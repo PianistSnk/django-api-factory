@@ -350,6 +350,30 @@ def test_apipaginator_page_overrides_stale_request_page():
     assert list(page_1.object_list) == ["row-1"]
 
 
+def test_apipaginator_slices_when_api_returns_full_dataset():
+    """Small APIs may ignore page/page_size and return all rows."""
+    admin = APIAdmin.__new__(APIAdmin)
+    admin.model = PagedPost
+    admin.list_per_page = 1000
+    admin.expected_total = 25
+
+    def fake_get_api_data(request):
+        qs = MyQuerySet(model=PagedPost)
+        qs._result_cache = [f"row-{i}" for i in range(25)]
+        return qs, ["id"]
+
+    admin.get_api_data = fake_get_api_data
+    qs_initial = MyQuerySet(model=PagedPost)
+    qs_initial._result_cache = [f"row-{i}" for i in range(25)]
+
+    req = RequestFactory().get("/admin/tests/pagedpost/?per_page=10")
+    paginator = admin.get_paginator(req, qs_initial, 1000)
+
+    assert list(paginator.page(1).object_list) == [f"row-{i}" for i in range(10)]
+    assert list(paginator.page(2).object_list) == [f"row-{i}" for i in range(10, 20)]
+    assert list(paginator.page(3).object_list) == [f"row-{i}" for i in range(20, 25)]
+
+
 def test_apipaginator_page1_first_load_no_extra_get_api_data_call():
     """When the ChangeList first constructs the paginator and calls
     page(1), the API has ALREADY been called once (by get_queryset
@@ -457,6 +481,31 @@ def test_per_page_choices_includes_large_values():
     # And we didn't drop the small values
     for v in (10, 25, 50, 100, 200):
         assert v in APIAdmin.PER_PAGE_CHOICES, f"lost {v} from PER_PAGE_CHOICES"
+
+
+def test_get_per_page_choices_includes_custom_list_per_page():
+    """The footer selector must include a custom admin.list_per_page value."""
+    from django_api_factory.admin import APIAdmin
+
+    admin = APIAdmin.__new__(APIAdmin)
+    admin.list_per_page = 1000
+
+    choices = admin.get_per_page_choices()
+
+    assert 1000 in choices
+    assert choices == tuple(sorted(choices))
+
+
+def test_get_per_page_choices_includes_effective_url_value():
+    """Direct URL values should still render as the selected footer option."""
+    from django_api_factory.admin import APIAdmin
+
+    admin = APIAdmin.__new__(APIAdmin)
+    admin.list_per_page = 50
+
+    choices = admin.get_per_page_choices(333)
+
+    assert 333 in choices
 
 
 def test_get_effective_per_page_accepts_2000_and_10000():

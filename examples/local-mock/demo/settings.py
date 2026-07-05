@@ -9,6 +9,8 @@ The mock server must be running separately:
     python spikes/big-data-mock/server.py --port 8200 --rows 100000
 """
 
+import os
+from importlib.util import find_spec
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -18,7 +20,14 @@ SECRET_KEY = "local-mock-example-not-a-secret-key"
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
 
-INSTALLED_APPS = [
+OPTIONAL_ADMIN_THEME_APPS = []
+if (
+    os.environ.get("DJANGO_API_FACTORY_DEMO_SIMPLEUI") == "1"
+    and find_spec("simpleui") is not None
+):
+    OPTIONAL_ADMIN_THEME_APPS.append("simpleui")
+
+INSTALLED_APPS = OPTIONAL_ADMIN_THEME_APPS + [
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -72,5 +81,9 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+
+DJANGO_API_FACTORY_ELEMENTUI_FILTERS = (
+    os.environ.get("DJANGO_API_FACTORY_ELEMENTUI_FILTERS", "0") == "1"
+)
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

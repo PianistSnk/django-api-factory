@@ -15,10 +15,13 @@ set.
 
 import pytest
 from django.apps import apps
+from django.contrib.admin import AdminSite
 from django.contrib.auth.management import create_permissions
 from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
+from django.test import RequestFactory
 
+from django_api_factory.admin import APIAdmin
 from django_api_factory.models import APIModel
 
 
@@ -59,6 +62,21 @@ class PermTestModel(APIModel):
         app_label = "tests"
 
 
+class AbstractPermBase(APIModel):
+    """Abstract APIModel base used to verify recursive subclass scanning."""
+
+    class Meta:
+        app_label = "tests"
+        abstract = True
+
+
+class NestedPermTestModel(AbstractPermBase):
+    """Concrete APIModel subclass below an abstract APIModel subclass."""
+
+    class Meta:
+        app_label = "tests"
+
+
 @pytest.mark.django_db
 def test_concrete_subclass_gets_view_permission_only(django_permissions):
     """After `create_permissions` + our trim, only `view_permtestmodel`
@@ -72,6 +90,16 @@ def test_concrete_subclass_gets_view_permission_only(django_permissions):
     assert "add_permtestmodel" not in codenames
     assert "change_permtestmodel" not in codenames
     assert "delete_permtestmodel" not in codenames
+
+
+@pytest.mark.django_db
+def test_nested_api_model_subclass_gets_view_permission_only(django_permissions):
+    """Permission trimming also handles indirect APIModel subclasses."""
+    ct = ContentType.objects.get_for_model(NestedPermTestModel)
+    codenames = set(
+        Permission.objects.filter(content_type=ct).values_list("codename", flat=True)
+    )
+    assert codenames == {"view_nestedpermtestmodel"}
 
 
 @pytest.mark.django_db
@@ -103,7 +131,10 @@ def test_trim_is_idempotent(django_permissions):
 # --- Permission check semantics -------------------------------------------
 
 @pytest.mark.django_db
-def test_view_permission_is_checked_via_user_has_perm(django_permissions, django_user_model):
+def test_view_permission_is_checked_via_user_has_perm(
+    django_permissions,
+    django_user_model,
+):
     """The stock Django flow: a user with `view_permtestmodel` in their
     permission set passes `user.has_perm('tests.view_permtestmodel')`."""
     ct = ContentType.objects.get_for_model(PermTestModel)
@@ -119,3 +150,37 @@ def test_view_permission_is_checked_via_user_has_perm(django_permissions, django
     user.user_permissions.add(perm)
     user = django_user_model.objects.get(pk=user.pk)  # refresh perm cache
     assert user.has_perm("tests.view_permtestmodel") is True
+
+
+@pytest.mark.django_db
+def test_apiadmin_uses_view_permission_for_staff_access(
+    django_permissions,
+    django_user_model,
+):
+    """A non-superuser staff member can view API admin pages with only
+    the model's view permission."""
+    ct = ContentType.objects.get_for_model(PermTestModel)
+    perm = Permission.objects.get(
+        content_type=ct,
+        codename="view_permtestmodel",
+    )
+    user = django_user_model.objects.create_user(
+        username="api-viewer",
+        password="x",
+        is_staff=True,
+    )
+    request = RequestFactory().get("/admin/tests/permtestmodel/")
+    request.user = user
+    model_admin = APIAdmin(PermTestModel, AdminSite(name="permission-test"))
+
+    assert model_admin.has_view_permission(request) is False
+    assert model_admin.has_module_permission(request) is False
+
+    user.user_permissions.add(perm)
+    request.user = django_user_model.objects.get(pk=user.pk)
+
+    assert model_admin.has_view_permission(request) is True
+    assert model_admin.has_module_permission(request) is True
+    assert model_admin.has_add_permission(request) is False
+    assert model_admin.has_change_permission(request) is False
+    assert model_admin.has_delete_permission(request) is False

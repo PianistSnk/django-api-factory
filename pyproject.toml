@@ -41,6 +41,9 @@ dev = [
     # ExportMixin.export_to_excel tests need openpyxl (tests/test_mixins.py).
     "openpyxl>=3.0",
 ]
+simpleui = [
+    "django-simpleui>=2026.1.13",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

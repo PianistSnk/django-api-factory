@@ -22,7 +22,7 @@
     <select id="per-page-select" name="per_page"
             onchange="applyPerPage();"
             style="display:inline-block; width:auto; margin:0 6px; padding:2px 6px; height:auto;">
-      {% for n in cl.model_admin.PER_PAGE_CHOICES %}
+      {% for n in cl.per_page_choices %}
         <option value="{{ n }}"{% if cl.effective_per_page == n %} selected{% endif %}>{{ n }}</option>
       {% endfor %}
     </select>
@@ -47,12 +47,56 @@
 
 {% block extrastyle %}
   {{ block.super }}
+  {% if api_factory_load_elementui_assets %}
+    <link rel="stylesheet" href="{{ api_factory_elementui_css_url }}">
+  {% endif %}
   <style>
     .per-page-selector { padding: 4px 12px; }
     .per-page-selector select { cursor: pointer; }
     .per-page-selector button { cursor: pointer; }
 
-    /* Top horizontal filter bar (modeled after simpleui). The filters
+    .api-elementui-filter-toolbar {
+      background: #fff;
+      border: 1px solid #ebeef5;
+      border-radius: 4px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.04);
+      margin-bottom: 12px;
+      padding: 10px 12px 2px;
+    }
+    .api-elementui-filter-form {
+      align-items: center;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .api-elementui-filter-toolbar .api-elementui-filter-select {
+      min-width: 190px;
+    }
+    .api-elementui-filter-toolbar .api-elementui-filter-select .el-input,
+    .api-elementui-filter-toolbar .api-elementui-filter-select .el-input__inner {
+      width: 100% !important;
+    }
+    .api-elementui-filter-toolbar .api-elementui-filter-select .el-select__tags {
+      left: 6px !important;
+      max-width: calc(100% - 36px) !important;
+      right: 30px !important;
+      width: auto !important;
+    }
+    .api-elementui-filter-toolbar .api-elementui-filter-select .el-select__input {
+      display: none !important;
+    }
+    .api-elementui-filter-toolbar .api-elementui-filter-select .el-tag {
+      max-width: 92px;
+    }
+    .api-elementui-filter-toolbar .api-elementui-filter-select .el-select__tags-text {
+      display: inline-block;
+      max-width: 68px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      vertical-align: bottom;
+    }
+
+    /* Top horizontal filter bar for the non-ElementUI fallback. The filters
        are rendered inline (each <details> is a pill that drops
        down options when expanded). */
     .filter-bar-top {
@@ -73,11 +117,120 @@
 {% endblock %}
 
 {% block search %}
-  {{ block.super }}
-  {% if cl.has_filters %}
-    <div class="filter-bar-top">
-      {% for spec in cl.filter_specs %}{% admin_list_filter cl spec %}{% endfor %}
+  {% if api_factory_use_elementui_filters %}
+    <div id="toolbar" class="api-elementui-filter-toolbar">
+      <div class="simpleui-form api-elementui-filter-form">
+        {% if cl.has_filters %}
+          {% for spec in cl.filter_specs %}
+            <el-select
+              size="small"
+              class="simpleui-form-item api-elementui-filter-select"
+              :class="{ 'api-elementui-filter-has-value': filters['{{ spec.lookup_kwarg|escapejs }}'].length }"
+              multiple
+              collapse-tags
+              clearable
+              v-model="filters['{{ spec.lookup_kwarg|escapejs }}']"
+              placeholder="{{ spec.title }}"
+            >
+              <el-option
+                v-for="option in options['{{ spec.lookup_kwarg|escapejs }}']"
+                :key="'{{ spec.lookup_kwarg|escapejs }}-' + option.value"
+                :label="option.label"
+                :value="option.value"
+              ></el-option>
+            </el-select>
+          {% endfor %}
+        {% endif %}
+        <el-button size="small" type="primary" icon="el-icon-search" @click="applyFilters">Apply</el-button>
+        <el-button size="small" icon="el-icon-refresh" @click="clearFilters">Clear</el-button>
+      </div>
     </div>
+    <script>
+      (function () {
+        var filterFields = [
+          {% for spec in cl.filter_specs %}
+            "{{ spec.lookup_kwarg|escapejs }}"{% if not forloop.last %},{% endif %}
+          {% endfor %}
+        ];
+        var filters = {};
+        var options = {};
+        var currentUrl = new URL(window.location.href);
+
+        function splitValues(raw) {
+          if (!raw) return [];
+          return raw.split(',').filter(function (value) { return value !== ''; });
+        }
+
+        filterFields.forEach(function (field) {
+          filters[field] = splitValues(currentUrl.searchParams.get(field));
+          options[field] = [];
+        });
+
+        {% for spec in cl.filter_specs %}
+          options["{{ spec.lookup_kwarg|escapejs }}"] = [
+            {% for option in spec.lookup_choices %}
+              { value: "{{ option.0|escapejs }}", label: "{{ option.1|escapejs }}" }{% if not forloop.last %},{% endif %}
+            {% endfor %}
+          ];
+        {% endfor %}
+
+        Object.keys(filters).forEach(function (field) {
+          var seen = {};
+          options[field].forEach(function (option) {
+            seen[option.value] = true;
+          });
+          filters[field].forEach(function (value) {
+            if (!seen[value]) {
+              options[field].push({ value: value, label: value });
+              seen[value] = true;
+            }
+          });
+        });
+
+        new Vue({
+          el: '#toolbar',
+          data: {
+            filters: filters,
+            options: options
+          },
+          methods: {
+            buildUrl: function () {
+              var url = new URL(window.location.href);
+              filterFields.forEach(function (field) {
+                url.searchParams.delete(field);
+              });
+              Object.keys(this.filters).forEach(function (field) {
+                var values = this.filters[field] || [];
+                if (values.length) {
+                  url.searchParams.set(field, values.join(','));
+                }
+              }, this);
+              url.searchParams.delete('p');
+              return url.toString();
+            },
+            applyFilters: function () {
+              window.location.href = this.buildUrl();
+            },
+            clearFilters: function () {
+              filterFields.forEach(function (field) {
+                this.filters[field] = [];
+              }, this);
+              window.location.href = this.buildUrl();
+            }
+          }
+        });
+      })();
+    </script>
+  {% else %}
+    {% comment %}
+    Do not render Django's stock search block here. API-backed rows have
+    dynamic fields, so the stock placeholder search input is not useful.
+    {% endcomment %}
+    {% if cl.has_filters %}
+      <div class="filter-bar-top">
+        {% for spec in cl.filter_specs %}{% admin_list_filter cl spec %}{% endfor %}
+      </div>
+    {% endif %}
   {% endif %}
 {% endblock %}
 
@@ -92,10 +245,14 @@
   {% include "admin/django_api_factory/action_form_modal.html" %}
 {% endblock %}
 
-{% block extrabody %}
+{% block extrahead %}
   {{ block.super }}
+  {% if api_factory_load_elementui_assets %}
+    <script src="{{ api_factory_vue_js_url }}"></script>
+    <script src="{{ api_factory_elementui_js_url }}"></script>
+  {% endif %}
   <script>
-  // Multi-select commit (modeled after simpleui's batch-apply
+  // Multi-select commit (modeled after ElementUI's batch-apply
   // filter bar: pick many, click Apply, then navigate with the
   // comma-list URL `?field=v1,v2,v3`). The in-memory filter in
   // APIAdmin.get_api_data already handles that URL via

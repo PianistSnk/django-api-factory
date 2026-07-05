@@ -115,6 +115,17 @@ def test_get_results_writes_effective_per_page():
     assert cl.paginator is paginator
 
 
+def test_get_results_exposes_per_page_choices_with_effective_value():
+    """Custom per-page values must appear in the footer selector."""
+    cl, _ = _make_cl_for_results(list_per_page=1000, page_per_page=1000)
+    cl.model_admin.get_per_page_choices.return_value = (10, 25, 1000, 2000)
+
+    cl.get_results(MagicMock())
+
+    cl.model_admin.get_per_page_choices.assert_called_once_with(1000)
+    assert cl.per_page_choices == (10, 25, 1000, 2000)
+
+
 def test_get_results_sets_result_count_and_can_show_all():
     cl, _ = _make_cl_for_results(total=50, list_max_show_all=200)
     cl.get_results(MagicMock())

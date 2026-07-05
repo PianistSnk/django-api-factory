@@ -6,8 +6,10 @@ from typing import Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
+from django.conf import settings
 from django.contrib import admin, messages
 from django.contrib.admin.decorators import display
+from django.contrib.auth import get_permission_codename
 from django.utils.safestring import mark_safe
 
 from django_api_factory.changelist import APIChangeList, APIADMIN_RESERVED_GET_PARAMS
@@ -122,8 +124,8 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
     #: API field names excluded from auto-generated filters.
     list_filter_exclude = []
 
-    #: Django search_fields placeholder kept for admin compatibility.
-    search_fields = ["input_date"]
+    #: Disable Django's stock search box by default for dynamic API rows.
+    search_fields = []
 
     #: Django admin list_display_links override for dynamic API columns.
     list_display_links = None
@@ -355,6 +357,12 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         """Disable change actions for read-only API-backed rows."""
         return False
 
+    def has_view_permission(self, request, obj=None):
+        """Allow access when the user has Django's view permission."""
+        opts = self.opts
+        codename = get_permission_codename("view", opts)
+        return request.user.has_perm(f"{opts.app_label}.{codename}")
+
     def get_changelist(self, request, **kwargs):
         """Return the custom ChangeList class used for API pagination."""
         return APIChangeList
@@ -368,7 +376,63 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
         auth/permissions as the regular changelist."""
         if request.GET.get("ajax_distinct") == "1":
             return self._ajax_distinct(request)
+        extra_context = {
+            **(extra_context or {}),
+            "api_factory_use_elementui_filters": self.use_elementui_filters,
+            "api_factory_load_elementui_assets": self.load_elementui_assets,
+            "api_factory_elementui_css_url": self.elementui_css_url,
+            "api_factory_elementui_js_url": self.elementui_js_url,
+            "api_factory_vue_js_url": self.vue_js_url,
+        }
         return super().changelist_view(request, extra_context)
+
+    @property
+    def use_simpleui_filters(self):
+        """Return True when SimpleUI is installed before Django admin."""
+        installed_apps = list(getattr(settings, "INSTALLED_APPS", ()))
+        try:
+            simpleui_index = installed_apps.index("simpleui")
+            admin_index = installed_apps.index("django.contrib.admin")
+        except ValueError:
+            return False
+        return simpleui_index < admin_index
+
+    @property
+    def use_elementui_filters(self):
+        """Return True when the ElementUI filter toolbar is enabled."""
+        return getattr(settings, "DJANGO_API_FACTORY_ELEMENTUI_FILTERS", True)
+
+    @property
+    def load_elementui_assets(self):
+        """Return True when django-api-factory must load ElementUI itself."""
+        return self.use_elementui_filters and not self.use_simpleui_filters
+
+    @property
+    def vue_js_url(self):
+        """Return the Vue runtime URL used when SimpleUI is not active."""
+        return getattr(
+            settings,
+            "DJANGO_API_FACTORY_VUE_JS_URL",
+            "https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.min.js",
+        )
+
+    @property
+    def elementui_js_url(self):
+        """Return the ElementUI JavaScript URL used without SimpleUI."""
+        return getattr(
+            settings,
+            "DJANGO_API_FACTORY_ELEMENTUI_JS_URL",
+            "https://cdn.jsdelivr.net/npm/element-ui@2.15.14/lib/index.js",
+        )
+
+    @property
+    def elementui_css_url(self):
+        """Return the ElementUI stylesheet URL used without SimpleUI."""
+        return getattr(
+            settings,
+            "DJANGO_API_FACTORY_ELEMENTUI_CSS_URL",
+            "https://cdn.jsdelivr.net/npm/element-ui@2.15.14/lib/theme-chalk/index.css",
+        )
 
     def _ajax_distinct(self, request):
         """JSON endpoint for the filter UI to fetch more distinct
@@ -932,6 +996,10 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
                     page_request.GET[PAGE_VAR] = str(number)
                     new_qs, _new_fields = self._admin.get_api_data(page_request)
                     items = list(new_qs)
+                    if len(items) > self.per_page:
+                        bottom = (number - 1) * self.per_page
+                        top = bottom + self.per_page
+                        items = items[bottom:top]
                     return self._get_page(items, number, self)
                 # Fallback (no request, e.g. direct test): slice whatever
                 # the queryset currently holds.
@@ -1013,6 +1081,18 @@ class APIAdmin(ActionFormMixin, AuditLogMixin, admin.ModelAdmin):
 
     #: Allowed page-size choices for the changelist footer selector.
     PER_PAGE_CHOICES = (10, 25, 50, 100, 200, 500, 2000, 10000)
+
+    def get_per_page_choices(self, effective_per_page=None):
+        """Return footer page-size choices including the active page size."""
+        choices = set(self.PER_PAGE_CHOICES)
+        for value in (self.list_per_page, effective_per_page):
+            try:
+                value = int(value)
+            except (TypeError, ValueError):
+                continue
+            if value > 0:
+                choices.add(value)
+        return tuple(sorted(choices))
 
     #: Default maximum rows fetched when no live total is available.
     DEFAULT_CACHE_FETCH_SIZE = 1000
