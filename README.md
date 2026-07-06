@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/PianistSnk/django-api-factory/actions/workflows/ci.yml/badge.svg)](https://github.com/PianistSnk/django-api-factory/actions)
 [![Coverage](https://img.shields.io/badge/coverage-85.95%25-brightgreen.svg)](#testing)
-[![Release](https://img.shields.io/badge/release-v0.1.1-blue.svg)](#install)
+[![Release](https://img.shields.io/badge/release-v0.1.2-blue.svg)](#install)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 [English](README.md) | [中文](README.zh-CN.md)
@@ -11,6 +11,8 @@
 
 Use a fixed `url` for simple APIs, or override `urls()` when the upstream API
 needs custom pagination, filtering, or sorting parameters.
+
+![REST API rows rendered as a read-only Django admin changelist](https://raw.githubusercontent.com/PianistSnk/django-api-factory/master/docs/assets/api-to-admin.svg)
 
 📖 **Tutorials** — [1. Hello, APIModel (15 min)](docs/tutorials/01-hello-apimodel.md) · [2. Filter, search, sort (20 min)](docs/tutorials/02-filter-search-sort.md) · [3. Cache, export, custom actions (25 min)](docs/tutorials/03-cache-export-actions.md)
 

@@ -1,6 +1,6 @@
 name: Publish to PyPI
 
-# Auto-publish workflow — trigger: push a tag matching v* (e.g. v0.1.1)
+# Auto-publish workflow — trigger: push a tag matching v* (e.g. v0.1.2)
 #
 # What it does:
 # 1. Build sdist + wheel via `python -m build`
@@ -14,7 +14,7 @@ name: Publish to PyPI
 #   2. Add it as a GitHub repo secret named `PYPI_API_TOKEN`:
 #      https://github.com/PianistSnk/django-api-factory/settings/secrets/actions
 #   3. Bump the version in pyproject.toml + commit + push
-#   4. Tag: `git tag v0.1.1 && git push origin v0.1.1`
+#   4. Tag: `git tag v0.1.2 && git push origin v0.1.2`
 #   5. The workflow runs, builds, publishes, opens a release. Done.
 #
 # To do a DRY-RUN (build but don't publish):

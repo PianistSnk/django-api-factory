@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "django-api-factory"
-version = "0.1.1"
+version = "0.1.2"
 description = "Display external REST API data in Django admin as if it were a managed model."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -29,6 +29,13 @@ dependencies = [
     "Django>=4.2",
     "requests>=2.28",
 ]
+
+[project.urls]
+Homepage = "https://pianistsnk.github.io/django-api-factory/"
+Documentation = "https://pianistsnk.github.io/django-api-factory/"
+Repository = "https://github.com/PianistSnk/django-api-factory"
+Issues = "https://github.com/PianistSnk/django-api-factory/issues"
+Changelog = "https://github.com/PianistSnk/django-api-factory/blob/master/docs/changelog.md"
 
 [project.optional-dependencies]
 # `redis` is required by tests/test_cache.py (RedisCacheBackend unit tests).

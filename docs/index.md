@@ -61,6 +61,7 @@ Two standalone projects live in the `examples/` directory:
 
 ## Project status
 
+- [x] **v0.1.2** — README diagram and PyPI project links.
 - [x] **v0.1.1** — native `list_display` support for API fields.
 - [x] **v0.1.0** — first PyPI-ready release.
 - [x] `APIModel` + `APIAdmin` for read-only external REST data.

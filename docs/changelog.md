@@ -6,6 +6,17 @@ this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.2] - 2026-07-06
+
+### Added
+- README diagram showing REST API rows rendered as a read-only Django admin
+  changelist.
+- PyPI project links for homepage, documentation, repository, issues, and
+  changelog.
+
+### Fixed
+- Corrected the PyPI changelog URL to point at `docs/changelog.md`.
+
 ## [0.1.1] - 2026-07-06
 
 ### Added

@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/PianistSnk/django-api-factory/actions/workflows/ci.yml/badge.svg)](https://github.com/PianistSnk/django-api-factory/actions)
 [![Coverage](https://img.shields.io/badge/coverage-85.95%25-brightgreen.svg)](#testing)
-[![Release](https://img.shields.io/badge/release-v0.1.1-blue.svg)](#install)
+[![Release](https://img.shields.io/badge/release-v0.1.2-blue.svg)](#install)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 [English](README.md) | [中文](README.zh-CN.md)
@@ -10,6 +10,8 @@
 **把只读 REST API 数据显示到 Django admin 里 — 不写前端,也不为 API 行数据建数据库表。**
 
 简单 API 只需要写 `url`; 如果上游 API 有自己的分页、筛选、排序参数,再 override `urls()`。
+
+![REST API 行数据渲染为只读 Django admin changelist](https://raw.githubusercontent.com/PianistSnk/django-api-factory/master/docs/assets/api-to-admin.svg)
 
 📖 **教程** — [1. Hello, APIModel (15 分钟)](docs/tutorials/01-hello-apimodel.md) · [2. 筛选/搜索/排序 (20 分钟)](docs/tutorials/02-filter-search-sort.md) · [3. 缓存/导出/自定义 action (25 分钟)](docs/tutorials/03-cache-export-actions.md)
 
